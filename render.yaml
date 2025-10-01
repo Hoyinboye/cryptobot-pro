@@ -1,0 +1,28 @@
+services:
+  # Backend API
+  - type: web
+    name: cryptobot-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /api/health
+
+  # Frontend (Static Site)
+  - type: web
+    name: cryptobot-frontend
+    env: static
+    buildCommand: cd client && npm install && npm run build
+    staticPublishPath: ./client/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
