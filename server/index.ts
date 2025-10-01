@@ -2,6 +2,14 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://cryptointeltrade.web.app',
+  'https://cryptointeltrade.firebaseapp.com'
+];
+
+
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
