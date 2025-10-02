@@ -8,8 +8,6 @@ const allowedOrigins = [
   'https://cryptointeltrade.firebaseapp.com'
 ];
 
-
-
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

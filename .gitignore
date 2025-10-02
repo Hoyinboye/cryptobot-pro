@@ -1,5 +1,5 @@
 node_modules
-dist
+# dist  (allowing this to be committed)
 .DS_Store
 server/public
 vite.config.ts.*
