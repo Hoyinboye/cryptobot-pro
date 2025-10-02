@@ -910,8 +910,17 @@ Respond with JSON only in this exact format:
       if (user.isDemo) {
         // Demo mode - simulate trade execution
         trade = await storage.createTrade({
-          ...tradeData,
-          status: 'filled',
+          userId: user.id,
+          portfolioId: portfolio.id,
+          symbol: tradeData.symbol,
+          side: tradeData.side,
+          type: tradeData.type,
+          amount: tradeData.amount,
+          price: tradeData.price,
+          status: 'filled',  // ✅ Demo trades fill instantly
+          fee: tradeData.fee,
+          isDemo: tradeData.isDemo,
+          isAiGenerated: tradeData.isAiGenerated,
           krakenOrderId: `demo_${Date.now()}`,
           metadata: { demo: true }
         });
@@ -1018,13 +1027,22 @@ Respond with JSON only in this exact format:
           return res.status(400).json({ error: orderResult.error[0] });
         }
 
-        trade = await storage.createTrade({
-          ...tradeData,
-          status: 'pending',
+       trade = await storage.createTrade({
+          userId: user.id,
+          portfolioId: portfolio.id,
+          symbol: tradeData.symbol,
+          side: tradeData.side,
+          type: tradeData.type,
+          amount: tradeData.amount,
+          price: tradeData.price,
+          status: 'pending',  // ✅ Real trades are pending until Kraken confirms
+          fee: tradeData.fee,
+          isDemo: tradeData.isDemo,
+          isAiGenerated: tradeData.isAiGenerated,
           krakenOrderId: orderResult.result.txid[0],
           metadata: { kraken: true }
         });
-      }
+              }
 
       // Note: WebSocket broadcasting disabled for security - trade data should only be sent to authorized users
 

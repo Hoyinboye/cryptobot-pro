@@ -91,57 +91,159 @@ export const tradingStrategies = pgTable("trading_strategies", {
 });
 
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
+// Insert schemas - manually defined with proper required/optional fields
+export const insertUserSchema = z.object({
+  firebaseUid: z.string(),  // REQUIRED
+  email: z.string().email(), // REQUIRED
+  displayName: z.string().optional().nullable(),
+  photoURL: z.string().optional().nullable(),
+  isDemo: z.boolean().optional().default(true),
+  krakenApiKey: z.string().optional().nullable(),
+  krakenApiSecret: z.string().optional().nullable(),
+  riskSettings: z.any().optional(),
 });
 
-export const insertPortfolioSchema = createInsertSchema(portfolios).omit({
-  id: true,
-  updatedAt: true,
+export const insertPortfolioSchema = z.object({
+  userId: z.string(), // REQUIRED
+  totalBalance: z.string().optional(),
+  availableBalance: z.string().optional(),
+  tradingBalance: z.string().optional(),
+  pnl24h: z.string().optional(),
+  pnlPercentage24h: z.string().optional(),
+  isDemo: z.boolean().optional(),
 });
 
-export const insertHoldingSchema = createInsertSchema(holdings).omit({
-  id: true,
-  updatedAt: true,
+export const insertHoldingSchema = z.object({
+  portfolioId: z.string(), // REQUIRED
+  symbol: z.string(), // REQUIRED
+  amount: z.string(), // REQUIRED
+  averagePrice: z.string(), // REQUIRED
+  currentPrice: z.string(), // REQUIRED
+  value: z.string(), // REQUIRED
+  pnl: z.string().optional(),
+  pnlPercentage: z.string().optional(),
 });
 
-export const insertTradeSchema = createInsertSchema(trades).omit({
-  id: true,
-  createdAt: true,
-  filledAt: true,
+export const insertTradeSchema = z.object({
+  userId: z.string(), // REQUIRED
+  portfolioId: z.string(), // REQUIRED
+  symbol: z.string(), // REQUIRED
+  side: z.string(), // REQUIRED
+  type: z.string(), // REQUIRED
+  amount: z.string(), // REQUIRED
+  price: z.string(), // REQUIRED
+  status: z.string(), // REQUIRED
+  fee: z.string().optional(),
+  isDemo: z.boolean().optional(),
+  isAiGenerated: z.boolean().optional(),
+  krakenOrderId: z.string().optional().nullable(),
+  metadata: z.any().optional(),
 });
 
-export const insertAiSignalSchema = createInsertSchema(aiSignals).omit({
-  id: true,
-  createdAt: true,
-  expiresAt: true,
+export const insertAiSignalSchema = z.object({
+  symbol: z.string(), // REQUIRED
+  signal: z.string(), // REQUIRED
+  confidence: z.number(), // REQUIRED
+  entryPrice: z.string().optional(),
+  targetPrice: z.string().optional(),
+  stopLoss: z.string().optional(),
+  riskReward: z.string().optional(),
+  reasoning: z.string().optional().nullable(),
+  indicators: z.any().optional(),
+  isActive: z.boolean().optional(),
 });
 
-export const insertTradingStrategySchema = createInsertSchema(tradingStrategies).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertTradingStrategySchema = z.object({
+  userId: z.string(), // REQUIRED
+  name: z.string(), // REQUIRED
+  symbol: z.string(), // REQUIRED
+  strategy: z.string(), // REQUIRED
+  parameters: z.any(), // REQUIRED
+  description: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
+  performance: z.any().optional(),
 });
 
-// Types
+// Types - Select types from Drizzle
 export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-
 export type Portfolio = typeof portfolios.$inferSelect;
-export type InsertPortfolio = z.infer<typeof insertPortfolioSchema>;
-
 export type Holding = typeof holdings.$inferSelect;
-export type InsertHolding = z.infer<typeof insertHoldingSchema>;
-
 export type Trade = typeof trades.$inferSelect;
-export type InsertTrade = z.infer<typeof insertTradeSchema>;
-
 export type AiSignal = typeof aiSignals.$inferSelect;
-export type InsertAiSignal = z.infer<typeof insertAiSignalSchema>;
-
 export type TradingStrategy = typeof tradingStrategies.$inferSelect;
-export type InsertTradingStrategy = z.infer<typeof insertTradingStrategySchema>;
+
+// Insert types - manually defined to include optional fields
+export type InsertUser = {
+  firebaseUid: string;
+  email: string;
+  displayName?: string | null;
+  photoURL?: string | null;
+  isDemo?: boolean;
+  krakenApiKey?: string | null;
+  krakenApiSecret?: string | null;
+  riskSettings?: any;
+};
+
+export type InsertPortfolio = {
+  userId: string;
+  totalBalance?: string;
+  availableBalance?: string;
+  tradingBalance?: string;
+  pnl24h?: string;
+  pnlPercentage24h?: string;
+  isDemo?: boolean;
+};
+
+export type InsertHolding = {
+  portfolioId: string;
+  symbol: string;
+  amount: string;
+  averagePrice: string;
+  currentPrice: string;
+  value: string;
+  pnl?: string;
+  pnlPercentage?: string;
+};
+
+export type InsertTrade = {
+  userId: string;
+  portfolioId: string;
+  symbol: string;
+  side: string;
+  type: string;
+  amount: string;
+  price: string;
+  status: string;
+  fee?: string;
+  isDemo?: boolean;
+  isAiGenerated?: boolean;
+  krakenOrderId?: string | null;
+  metadata?: any;
+};
+
+export type InsertAiSignal = {
+  symbol: string;
+  signal: string;
+  confidence: number;
+  entryPrice?: string;
+  targetPrice?: string;
+  stopLoss?: string;
+  riskReward?: string;
+  reasoning?: string | null;
+  indicators?: any;
+  isActive?: boolean;
+};
+
+export type InsertTradingStrategy = {
+  userId: string;
+  name: string;
+  symbol: string;
+  strategy: string;
+  parameters: any;
+  description?: string | null;
+  isActive?: boolean;
+  performance?: any;
+};  // ✅ FIX0.
 
 // Public user type without sensitive data
 export interface PublicUser {
