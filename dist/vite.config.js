@@ -30,10 +30,6 @@ const vite_1 = require("vite");
 const plugin_react_1 = __importDefault(require("@vitejs/plugin-react"));
 const path_1 = __importDefault(require("path"));
 const vite_plugin_runtime_error_modal_1 = __importDefault(require("@replit/vite-plugin-runtime-error-modal"));
-const url_1 = require("url");
-// For ES modules compatibility
-const __filename = (0, url_1.fileURLToPath)(import.meta.url);
-const __dirname = path_1.default.dirname(__filename);
 exports.default = (0, vite_1.defineConfig)({
     plugins: [
         (0, plugin_react_1.default)(),
@@ -48,14 +44,14 @@ exports.default = (0, vite_1.defineConfig)({
     ],
     resolve: {
         alias: {
-            "@": path_1.default.resolve(__dirname, "client", "src"),
-            "@shared": path_1.default.resolve(__dirname, "shared"),
-            "@assets": path_1.default.resolve(__dirname, "attached_assets"),
+            "@": path_1.default.resolve(process.cwd(), "client", "src"),
+            "@shared": path_1.default.resolve(process.cwd(), "shared"),
+            "@assets": path_1.default.resolve(process.cwd(), "attached_assets"),
         },
     },
-    root: path_1.default.resolve(__dirname, "client"),
+    root: path_1.default.resolve(process.cwd(), "client"),
     build: {
-        outDir: path_1.default.resolve(__dirname, "dist/public"),
+        outDir: path_1.default.resolve(process.cwd(), "dist/public"),
         emptyOutDir: true,
     },
     server: {
