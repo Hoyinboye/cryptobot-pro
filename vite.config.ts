@@ -28,10 +28,10 @@ export default defineConfig({
   },
   root: path.resolve(process.cwd(), "client"),
   build: {
-    outDir: path.resolve(process.cwd(), "dist/public"),
+    outDir: "./dist/public",  // Changed from path.resolve()
     emptyOutDir: true,
   },
-  server: {
+    server: {
     fs: {
       strict: true,
       deny: ["**/.*"],
