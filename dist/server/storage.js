@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.storage = exports.MemStorage = exports.PostgreSQLStorage = void 0;
-const schema_1 = require("@shared/schema");
+const schema_1 = require("../shared/schema");
 const crypto_1 = require("crypto");
 const db_1 = require("./db");
 const drizzle_orm_1 = require("drizzle-orm");
