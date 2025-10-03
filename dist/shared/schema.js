@@ -1,157 +1,161 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, integer } from "drizzle-orm/pg-core";
-import { z } from "zod";
-export const users = pgTable("users", {
-    id: varchar("id").primaryKey().default(sql `gen_random_uuid()`),
-    firebaseUid: text("firebase_uid").notNull().unique(),
-    email: text("email").notNull().unique(),
-    displayName: text("display_name"),
-    photoURL: text("photo_url"),
-    isDemo: boolean("is_demo").default(true),
-    krakenApiKey: text("kraken_api_key"),
-    krakenApiSecret: text("kraken_api_secret"),
-    riskSettings: jsonb("risk_settings").default({}),
-    createdAt: timestamp("created_at").defaultNow(),
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.insertTradingStrategySchema = exports.insertAiSignalSchema = exports.insertTradeSchema = exports.insertHoldingSchema = exports.insertPortfolioSchema = exports.insertUserSchema = exports.tradingStrategies = exports.aiSignals = exports.trades = exports.holdings = exports.portfolios = exports.users = void 0;
+exports.sanitizeUser = sanitizeUser;
+const drizzle_orm_1 = require("drizzle-orm");
+const pg_core_1 = require("drizzle-orm/pg-core");
+const zod_1 = require("zod");
+exports.users = (0, pg_core_1.pgTable)("users", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    firebaseUid: (0, pg_core_1.text)("firebase_uid").notNull().unique(),
+    email: (0, pg_core_1.text)("email").notNull().unique(),
+    displayName: (0, pg_core_1.text)("display_name"),
+    photoURL: (0, pg_core_1.text)("photo_url"),
+    isDemo: (0, pg_core_1.boolean)("is_demo").default(true),
+    krakenApiKey: (0, pg_core_1.text)("kraken_api_key"),
+    krakenApiSecret: (0, pg_core_1.text)("kraken_api_secret"),
+    riskSettings: (0, pg_core_1.jsonb)("risk_settings").default({}),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
 });
-export const portfolios = pgTable("portfolios", {
-    id: varchar("id").primaryKey().default(sql `gen_random_uuid()`),
-    userId: varchar("user_id").references(() => users.id).notNull(),
-    totalBalance: decimal("total_balance", { precision: 20, scale: 8 }).default("0"),
-    availableBalance: decimal("available_balance", { precision: 20, scale: 8 }).default("0"),
-    tradingBalance: decimal("trading_balance", { precision: 20, scale: 8 }).default("0"),
-    pnl24h: decimal("pnl_24h", { precision: 20, scale: 8 }).default("0"),
-    pnlPercentage24h: decimal("pnl_percentage_24h", { precision: 8, scale: 4 }).default("0"),
-    isDemo: boolean("is_demo").default(true),
-    updatedAt: timestamp("updated_at").defaultNow(),
+exports.portfolios = (0, pg_core_1.pgTable)("portfolios", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    userId: (0, pg_core_1.varchar)("user_id").references(() => exports.users.id).notNull(),
+    totalBalance: (0, pg_core_1.decimal)("total_balance", { precision: 20, scale: 8 }).default("0"),
+    availableBalance: (0, pg_core_1.decimal)("available_balance", { precision: 20, scale: 8 }).default("0"),
+    tradingBalance: (0, pg_core_1.decimal)("trading_balance", { precision: 20, scale: 8 }).default("0"),
+    pnl24h: (0, pg_core_1.decimal)("pnl_24h", { precision: 20, scale: 8 }).default("0"),
+    pnlPercentage24h: (0, pg_core_1.decimal)("pnl_percentage_24h", { precision: 8, scale: 4 }).default("0"),
+    isDemo: (0, pg_core_1.boolean)("is_demo").default(true),
+    updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow(),
 });
-export const holdings = pgTable("holdings", {
-    id: varchar("id").primaryKey().default(sql `gen_random_uuid()`),
-    portfolioId: varchar("portfolio_id").references(() => portfolios.id).notNull(),
-    symbol: text("symbol").notNull(),
-    amount: decimal("amount", { precision: 20, scale: 8 }).notNull(),
-    averagePrice: decimal("average_price", { precision: 20, scale: 8 }).notNull(),
-    currentPrice: decimal("current_price", { precision: 20, scale: 8 }).notNull(),
-    value: decimal("value", { precision: 20, scale: 8 }).notNull(),
-    pnl: decimal("pnl", { precision: 20, scale: 8 }).default("0"),
-    pnlPercentage: decimal("pnl_percentage", { precision: 8, scale: 4 }).default("0"),
-    updatedAt: timestamp("updated_at").defaultNow(),
+exports.holdings = (0, pg_core_1.pgTable)("holdings", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    portfolioId: (0, pg_core_1.varchar)("portfolio_id").references(() => exports.portfolios.id).notNull(),
+    symbol: (0, pg_core_1.text)("symbol").notNull(),
+    amount: (0, pg_core_1.decimal)("amount", { precision: 20, scale: 8 }).notNull(),
+    averagePrice: (0, pg_core_1.decimal)("average_price", { precision: 20, scale: 8 }).notNull(),
+    currentPrice: (0, pg_core_1.decimal)("current_price", { precision: 20, scale: 8 }).notNull(),
+    value: (0, pg_core_1.decimal)("value", { precision: 20, scale: 8 }).notNull(),
+    pnl: (0, pg_core_1.decimal)("pnl", { precision: 20, scale: 8 }).default("0"),
+    pnlPercentage: (0, pg_core_1.decimal)("pnl_percentage", { precision: 8, scale: 4 }).default("0"),
+    updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow(),
 });
-export const trades = pgTable("trades", {
-    id: varchar("id").primaryKey().default(sql `gen_random_uuid()`),
-    userId: varchar("user_id").references(() => users.id).notNull(),
-    portfolioId: varchar("portfolio_id").references(() => portfolios.id).notNull(),
-    symbol: text("symbol").notNull(),
-    side: text("side").notNull(), // 'buy' or 'sell'
-    type: text("type").notNull(), // 'market', 'limit', 'stop-loss'
-    amount: decimal("amount", { precision: 20, scale: 8 }).notNull(),
-    price: decimal("price", { precision: 20, scale: 8 }).notNull(),
-    fee: decimal("fee", { precision: 20, scale: 8 }).default("0"),
-    status: text("status").notNull(), // 'pending', 'filled', 'cancelled'
-    isDemo: boolean("is_demo").default(true),
-    isAiGenerated: boolean("is_ai_generated").default(false),
-    krakenOrderId: text("kraken_order_id"),
-    metadata: jsonb("metadata").default({}),
-    createdAt: timestamp("created_at").defaultNow(),
-    filledAt: timestamp("filled_at"),
+exports.trades = (0, pg_core_1.pgTable)("trades", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    userId: (0, pg_core_1.varchar)("user_id").references(() => exports.users.id).notNull(),
+    portfolioId: (0, pg_core_1.varchar)("portfolio_id").references(() => exports.portfolios.id).notNull(),
+    symbol: (0, pg_core_1.text)("symbol").notNull(),
+    side: (0, pg_core_1.text)("side").notNull(), // 'buy' or 'sell'
+    type: (0, pg_core_1.text)("type").notNull(), // 'market', 'limit', 'stop-loss'
+    amount: (0, pg_core_1.decimal)("amount", { precision: 20, scale: 8 }).notNull(),
+    price: (0, pg_core_1.decimal)("price", { precision: 20, scale: 8 }).notNull(),
+    fee: (0, pg_core_1.decimal)("fee", { precision: 20, scale: 8 }).default("0"),
+    status: (0, pg_core_1.text)("status").notNull(), // 'pending', 'filled', 'cancelled'
+    isDemo: (0, pg_core_1.boolean)("is_demo").default(true),
+    isAiGenerated: (0, pg_core_1.boolean)("is_ai_generated").default(false),
+    krakenOrderId: (0, pg_core_1.text)("kraken_order_id"),
+    metadata: (0, pg_core_1.jsonb)("metadata").default({}),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
+    filledAt: (0, pg_core_1.timestamp)("filled_at"),
 });
-export const aiSignals = pgTable("ai_signals", {
-    id: varchar("id").primaryKey().default(sql `gen_random_uuid()`),
-    symbol: text("symbol").notNull(),
-    signal: text("signal").notNull(), // 'buy', 'sell', 'hold'
-    confidence: integer("confidence").notNull(), // 0-100
-    entryPrice: decimal("entry_price", { precision: 20, scale: 8 }),
-    targetPrice: decimal("target_price", { precision: 20, scale: 8 }),
-    stopLoss: decimal("stop_loss", { precision: 20, scale: 8 }),
-    riskReward: decimal("risk_reward", { precision: 8, scale: 2 }),
-    reasoning: text("reasoning"),
-    indicators: jsonb("indicators").default({}),
-    isActive: boolean("is_active").default(true),
-    createdAt: timestamp("created_at").defaultNow(),
-    expiresAt: timestamp("expires_at"),
+exports.aiSignals = (0, pg_core_1.pgTable)("ai_signals", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    symbol: (0, pg_core_1.text)("symbol").notNull(),
+    signal: (0, pg_core_1.text)("signal").notNull(), // 'buy', 'sell', 'hold'
+    confidence: (0, pg_core_1.integer)("confidence").notNull(), // 0-100
+    entryPrice: (0, pg_core_1.decimal)("entry_price", { precision: 20, scale: 8 }),
+    targetPrice: (0, pg_core_1.decimal)("target_price", { precision: 20, scale: 8 }),
+    stopLoss: (0, pg_core_1.decimal)("stop_loss", { precision: 20, scale: 8 }),
+    riskReward: (0, pg_core_1.decimal)("risk_reward", { precision: 8, scale: 2 }),
+    reasoning: (0, pg_core_1.text)("reasoning"),
+    indicators: (0, pg_core_1.jsonb)("indicators").default({}),
+    isActive: (0, pg_core_1.boolean)("is_active").default(true),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
+    expiresAt: (0, pg_core_1.timestamp)("expires_at"),
 });
-export const tradingStrategies = pgTable("trading_strategies", {
-    id: varchar("id").primaryKey().default(sql `gen_random_uuid()`),
-    userId: varchar("user_id").references(() => users.id).notNull(),
-    name: text("name").notNull(),
-    description: text("description"),
-    symbol: text("symbol").notNull(),
-    strategy: text("strategy").notNull(), // 'rsi', 'moving_average', 'grid'
-    parameters: jsonb("parameters").notNull(),
-    isActive: boolean("is_active").default(false),
-    performance: jsonb("performance").default({}),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+exports.tradingStrategies = (0, pg_core_1.pgTable)("trading_strategies", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    userId: (0, pg_core_1.varchar)("user_id").references(() => exports.users.id).notNull(),
+    name: (0, pg_core_1.text)("name").notNull(),
+    description: (0, pg_core_1.text)("description"),
+    symbol: (0, pg_core_1.text)("symbol").notNull(),
+    strategy: (0, pg_core_1.text)("strategy").notNull(), // 'rsi', 'moving_average', 'grid'
+    parameters: (0, pg_core_1.jsonb)("parameters").notNull(),
+    isActive: (0, pg_core_1.boolean)("is_active").default(false),
+    performance: (0, pg_core_1.jsonb)("performance").default({}),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
+    updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow(),
 });
 // Insert schemas
 // Insert schemas - manually defined with proper required/optional fields
-export const insertUserSchema = z.object({
-    firebaseUid: z.string(), // REQUIRED
-    email: z.string().email(), // REQUIRED
-    displayName: z.string().optional().nullable(),
-    photoURL: z.string().optional().nullable(),
-    isDemo: z.boolean().optional().default(true),
-    krakenApiKey: z.string().optional().nullable(),
-    krakenApiSecret: z.string().optional().nullable(),
-    riskSettings: z.any().optional(),
+exports.insertUserSchema = zod_1.z.object({
+    firebaseUid: zod_1.z.string(), // REQUIRED
+    email: zod_1.z.string().email(), // REQUIRED
+    displayName: zod_1.z.string().optional().nullable(),
+    photoURL: zod_1.z.string().optional().nullable(),
+    isDemo: zod_1.z.boolean().optional().default(true),
+    krakenApiKey: zod_1.z.string().optional().nullable(),
+    krakenApiSecret: zod_1.z.string().optional().nullable(),
+    riskSettings: zod_1.z.any().optional(),
 });
-export const insertPortfolioSchema = z.object({
-    userId: z.string(), // REQUIRED
-    totalBalance: z.string().optional(),
-    availableBalance: z.string().optional(),
-    tradingBalance: z.string().optional(),
-    pnl24h: z.string().optional(),
-    pnlPercentage24h: z.string().optional(),
-    isDemo: z.boolean().optional(),
+exports.insertPortfolioSchema = zod_1.z.object({
+    userId: zod_1.z.string(), // REQUIRED
+    totalBalance: zod_1.z.string().optional(),
+    availableBalance: zod_1.z.string().optional(),
+    tradingBalance: zod_1.z.string().optional(),
+    pnl24h: zod_1.z.string().optional(),
+    pnlPercentage24h: zod_1.z.string().optional(),
+    isDemo: zod_1.z.boolean().optional(),
 });
-export const insertHoldingSchema = z.object({
-    portfolioId: z.string(), // REQUIRED
-    symbol: z.string(), // REQUIRED
-    amount: z.string(), // REQUIRED
-    averagePrice: z.string(), // REQUIRED
-    currentPrice: z.string(), // REQUIRED
-    value: z.string(), // REQUIRED
-    pnl: z.string().optional(),
-    pnlPercentage: z.string().optional(),
+exports.insertHoldingSchema = zod_1.z.object({
+    portfolioId: zod_1.z.string(), // REQUIRED
+    symbol: zod_1.z.string(), // REQUIRED
+    amount: zod_1.z.string(), // REQUIRED
+    averagePrice: zod_1.z.string(), // REQUIRED
+    currentPrice: zod_1.z.string(), // REQUIRED
+    value: zod_1.z.string(), // REQUIRED
+    pnl: zod_1.z.string().optional(),
+    pnlPercentage: zod_1.z.string().optional(),
 });
-export const insertTradeSchema = z.object({
-    userId: z.string(), // REQUIRED
-    portfolioId: z.string(), // REQUIRED
-    symbol: z.string(), // REQUIRED
-    side: z.string(), // REQUIRED
-    type: z.string(), // REQUIRED
-    amount: z.string(), // REQUIRED
-    price: z.string(), // REQUIRED
-    status: z.string(), // REQUIRED
-    fee: z.string().optional(),
-    isDemo: z.boolean().optional(),
-    isAiGenerated: z.boolean().optional(),
-    krakenOrderId: z.string().optional().nullable(),
-    metadata: z.any().optional(),
+exports.insertTradeSchema = zod_1.z.object({
+    userId: zod_1.z.string(), // REQUIRED
+    portfolioId: zod_1.z.string(), // REQUIRED
+    symbol: zod_1.z.string(), // REQUIRED
+    side: zod_1.z.string(), // REQUIRED
+    type: zod_1.z.string(), // REQUIRED
+    amount: zod_1.z.string(), // REQUIRED
+    price: zod_1.z.string(), // REQUIRED
+    status: zod_1.z.string(), // REQUIRED
+    fee: zod_1.z.string().optional(),
+    isDemo: zod_1.z.boolean().optional(),
+    isAiGenerated: zod_1.z.boolean().optional(),
+    krakenOrderId: zod_1.z.string().optional().nullable(),
+    metadata: zod_1.z.any().optional(),
 });
-export const insertAiSignalSchema = z.object({
-    symbol: z.string(), // REQUIRED
-    signal: z.string(), // REQUIRED
-    confidence: z.number(), // REQUIRED
-    entryPrice: z.string().optional(),
-    targetPrice: z.string().optional(),
-    stopLoss: z.string().optional(),
-    riskReward: z.string().optional(),
-    reasoning: z.string().optional().nullable(),
-    indicators: z.any().optional(),
-    isActive: z.boolean().optional(),
+exports.insertAiSignalSchema = zod_1.z.object({
+    symbol: zod_1.z.string(), // REQUIRED
+    signal: zod_1.z.string(), // REQUIRED
+    confidence: zod_1.z.number(), // REQUIRED
+    entryPrice: zod_1.z.string().optional(),
+    targetPrice: zod_1.z.string().optional(),
+    stopLoss: zod_1.z.string().optional(),
+    riskReward: zod_1.z.string().optional(),
+    reasoning: zod_1.z.string().optional().nullable(),
+    indicators: zod_1.z.any().optional(),
+    isActive: zod_1.z.boolean().optional(),
 });
-export const insertTradingStrategySchema = z.object({
-    userId: z.string(), // REQUIRED
-    name: z.string(), // REQUIRED
-    symbol: z.string(), // REQUIRED
-    strategy: z.string(), // REQUIRED
-    parameters: z.any(), // REQUIRED
-    description: z.string().optional().nullable(),
-    isActive: z.boolean().optional(),
-    performance: z.any().optional(),
+exports.insertTradingStrategySchema = zod_1.z.object({
+    userId: zod_1.z.string(), // REQUIRED
+    name: zod_1.z.string(), // REQUIRED
+    symbol: zod_1.z.string(), // REQUIRED
+    strategy: zod_1.z.string(), // REQUIRED
+    parameters: zod_1.z.any(), // REQUIRED
+    description: zod_1.z.string().optional().nullable(),
+    isActive: zod_1.z.boolean().optional(),
+    performance: zod_1.z.any().optional(),
 });
 // Function to convert User to PublicUser (sanitize sensitive data)
-export function sanitizeUser(user) {
+function sanitizeUser(user) {
     const { krakenApiKey, krakenApiSecret, riskSettings, ...publicUser } = user;
     return publicUser;
 }

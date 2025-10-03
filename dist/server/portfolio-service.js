@@ -1,16 +1,19 @@
-import { storage } from './storage';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.portfolioService = exports.PortfolioService = void 0;
+const storage_1 = require("./storage");
 /**
  * Service for managing portfolio calculations and updates
  */
-export class PortfolioService {
+class PortfolioService {
     /**
      * Calculate and update portfolio P&L based on current market prices
      */
     async updatePortfolioPnL(userId, marketPrices) {
-        const portfolio = await storage.getPortfolio(userId);
+        const portfolio = await storage_1.storage.getPortfolio(userId);
         if (!portfolio)
             return;
-        const holdings = await storage.getHoldings(portfolio.id);
+        const holdings = await storage_1.storage.getHoldings(portfolio.id);
         let totalPnL = 0;
         let totalInvestment = 0;
         let updatedTradingBalance = 0;
@@ -24,7 +27,7 @@ export class PortfolioService {
             const holdingPnL = (currentPrice - avgPrice) * amount;
             const holdingPnLPercentage = avgPrice > 0 ? (holdingPnL / investment) * 100 : 0;
             // Update individual holding with current values
-            await storage.updateHolding(holding.id, {
+            await storage_1.storage.updateHolding(holding.id, {
                 currentPrice: currentPrice.toString(),
                 value: holdingValue.toFixed(8),
                 pnl: holdingPnL.toFixed(8),
@@ -38,7 +41,7 @@ export class PortfolioService {
         const portfolioPnLPercentage = totalInvestment > 0 ? (totalPnL / totalInvestment) * 100 : 0;
         // Update portfolio with calculated values
         const availableBalance = parseFloat(portfolio.availableBalance || '0');
-        await storage.updatePortfolio(portfolio.id, {
+        await storage_1.storage.updatePortfolio(portfolio.id, {
             tradingBalance: updatedTradingBalance.toFixed(8),
             totalBalance: (availableBalance + updatedTradingBalance).toFixed(8),
             pnl24h: totalPnL.toFixed(8),
@@ -57,7 +60,7 @@ export class PortfolioService {
      * Calculate portfolio metrics for display
      */
     async getPortfolioMetrics(userId) {
-        const portfolio = await storage.getPortfolio(userId);
+        const portfolio = await storage_1.storage.getPortfolio(userId);
         if (!portfolio) {
             return {
                 totalValue: 0,
@@ -67,7 +70,7 @@ export class PortfolioService {
                 worstPerformer: null
             };
         }
-        const holdings = await storage.getHoldings(portfolio.id);
+        const holdings = await storage_1.storage.getHoldings(portfolio.id);
         let totalValue = parseFloat(portfolio.availableBalance || '0');
         let totalPnL = 0;
         let totalInvestment = 0;
@@ -96,4 +99,5 @@ export class PortfolioService {
         };
     }
 }
-export const portfolioService = new PortfolioService();
+exports.PortfolioService = PortfolioService;
+exports.portfolioService = new PortfolioService();

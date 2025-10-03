@@ -1,19 +1,19 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "outDir": "../dist",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": false,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": false,
     "baseUrl": "..",
     "paths": {
       "@shared/*": ["./shared/*"]
+      
     }
   },
   "include": ["**/*.ts", "../shared/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "vite.config.ts", "../vite.config.ts", "**/vite.config.ts"]
 }

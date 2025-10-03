@@ -1,25 +1,31 @@
-import { createServer } from "http";
-import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
-import { insertTradeSchema, sanitizeUser } from "@shared/schema";
-import OpenAI from "openai";
-import crypto from "crypto";
-import { z } from "zod";
-import { initializeApp, getApps } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.registerRoutes = registerRoutes;
+const http_1 = require("http");
+const ws_1 = require("ws");
+const storage_1 = require("./storage");
+const schema_1 = require("@shared/schema");
+const openai_1 = __importDefault(require("openai"));
+const crypto_1 = __importDefault(require("crypto"));
+const zod_1 = require("zod");
+const app_1 = require("firebase-admin/app");
+const auth_1 = require("firebase-admin/auth");
 // Initialize Firebase Admin SDK
-if (getApps().length === 0) {
+if ((0, app_1.getApps)().length === 0) {
     // For demo/development - initialize with project ID from environment
-    initializeApp({
+    (0, app_1.initializeApp)({
         projectId: process.env.VITE_FIREBASE_PROJECT_ID
     });
 }
-const adminAuth = getAuth();
+const adminAuth = (0, auth_1.getAuth)();
 // Kraken API helper functions
 function getKrakenSignature(path, request, secret, nonce) {
     const message = nonce + request;
-    const hash = crypto.createHash('sha256').update(message).digest();
-    const hmac = crypto.createHmac('sha512', Buffer.from(secret, 'base64'));
+    const hash = crypto_1.default.createHash('sha256').update(message).digest();
+    const hmac = crypto_1.default.createHmac('sha512', Buffer.from(secret, 'base64'));
     hmac.update(path + hash);
     return hmac.digest('base64');
 }
@@ -58,7 +64,7 @@ function getOpenAI() {
         if (!process.env.OPENAI_API_KEY) {
             throw new Error('OPENAI_API_KEY environment variable is required for AI features');
         }
-        openaiClient = new OpenAI({
+        openaiClient = new openai_1.default({
             apiKey: process.env.OPENAI_API_KEY
         });
     }
@@ -99,7 +105,7 @@ async function validateRiskLimits(userId, portfolioId, tradeValue, tradeSide, sy
     }
     // Check max open positions (only for buys into new positions)
     if (riskSettings.maxOpenPositions && tradeSide === 'buy') {
-        const holdings = await storage.getHoldings(portfolioId);
+        const holdings = await storage_1.storage.getHoldings(portfolioId);
         const openPositions = holdings.length;
         const existingHolding = holdings.find(h => h.symbol === symbol);
         // Only block if at limit AND this is a new position (not adding to existing)
@@ -116,7 +122,7 @@ async function validateRiskLimits(userId, portfolioId, tradeValue, tradeSide, sy
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         // Get today's trades to calculate daily P&L
-        const allTrades = await storage.getTrades(userId, 1000);
+        const allTrades = await storage_1.storage.getTrades(userId, 1000);
         const todayTrades = allTrades.filter(t => t.createdAt && new Date(t.createdAt) >= todayStart);
         // Calculate realized P&L from today's trades
         let dailyPnL = 0;
@@ -197,10 +203,10 @@ async function getKrakenTradeHistory(apiKey, apiSecret, options = {}) {
         return [];
     }
 }
-export async function registerRoutes(app) {
-    const httpServer = createServer(app);
+async function registerRoutes(app) {
+    const httpServer = (0, http_1.createServer)(app);
     // WebSocket server for real-time data
-    const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+    const wss = new ws_1.WebSocketServer({ server: httpServer, path: '/ws' });
     // Store active WebSocket connections
     const wsConnections = new Set();
     wss.on('connection', (ws) => {
@@ -214,7 +220,7 @@ export async function registerRoutes(app) {
     // Broadcast to all connected clients
     function broadcast(data) {
         wsConnections.forEach(ws => {
-            if (ws.readyState === WebSocket.OPEN) {
+            if (ws.readyState === ws_1.WebSocket.OPEN) {
                 ws.send(JSON.stringify(data));
             }
         });
@@ -259,9 +265,9 @@ export async function registerRoutes(app) {
             const email = decodedToken.email || '';
             const displayName = decodedToken.name || null;
             const photoURL = decodedToken.picture || null;
-            let user = await storage.getUserByFirebaseUid(firebaseUid);
+            let user = await storage_1.storage.getUserByFirebaseUid(firebaseUid);
             if (!user) {
-                user = await storage.createUser({
+                user = await storage_1.storage.createUser({
                     firebaseUid,
                     email,
                     displayName,
@@ -272,7 +278,7 @@ export async function registerRoutes(app) {
                     riskSettings: {}
                 });
                 // Create default portfolio
-                await storage.createPortfolio({
+                await storage_1.storage.createPortfolio({
                     userId: user.id,
                     totalBalance: "10000.00", // Demo balance
                     availableBalance: "10000.00",
@@ -282,7 +288,7 @@ export async function registerRoutes(app) {
                     isDemo: true
                 });
             }
-            res.json({ user: sanitizeUser(user) });
+            res.json({ user: (0, schema_1.sanitizeUser)(user) });
         }
         catch (error) {
             console.error('Login error:', error);
@@ -294,11 +300,11 @@ export async function registerRoutes(app) {
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
-            res.json({ user: sanitizeUser(user) });
+            res.json({ user: (0, schema_1.sanitizeUser)(user) });
         }
         catch (error) {
             res.status(500).json({ error: 'Failed to get user profile' });
@@ -309,7 +315,7 @@ export async function registerRoutes(app) {
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
@@ -341,9 +347,9 @@ export async function registerRoutes(app) {
                 riskSettings.maxOpenPositions = value;
             }
             // Update user risk settings
-            await storage.updateUser(user.id, { riskSettings });
-            const updatedUser = await storage.getUserByFirebaseUid(req.firebaseUid);
-            res.json({ user: sanitizeUser(updatedUser) });
+            await storage_1.storage.updateUser(user.id, { riskSettings });
+            const updatedUser = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
+            res.json({ user: (0, schema_1.sanitizeUser)(updatedUser) });
         }
         catch (error) {
             console.error('Update risk settings error:', error);
@@ -356,12 +362,12 @@ export async function registerRoutes(app) {
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
-            const portfolio = await storage.getPortfolio(user.id);
-            const holdings = portfolio ? await storage.getHoldings(portfolio.id) : [];
+            const portfolio = await storage_1.storage.getPortfolio(user.id);
+            const holdings = portfolio ? await storage_1.storage.getHoldings(portfolio.id) : [];
             res.json({ portfolio, holdings });
         }
         catch (error) {
@@ -496,7 +502,7 @@ export async function registerRoutes(app) {
             const { symbol, includeInactive, limit } = req.query;
             if (includeInactive === 'true') {
                 // Return all signals (active and inactive) for historical data
-                const signals = await storage.getAllSignals({
+                const signals = await storage_1.storage.getAllSignals({
                     symbol: symbol,
                     includeInactive: true,
                     limit: limit ? parseInt(limit, 10) : undefined
@@ -505,7 +511,7 @@ export async function registerRoutes(app) {
             }
             else {
                 // Return only active signals (default behavior)
-                const signals = await storage.getActiveSignals(symbol);
+                const signals = await storage_1.storage.getActiveSignals(symbol);
                 res.json({ signals });
             }
         }
@@ -519,7 +525,7 @@ export async function registerRoutes(app) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
             const { id } = req.params;
-            const signal = await storage.updateAiSignal(id, {
+            const signal = await storage_1.storage.updateAiSignal(id, {
                 isActive: false
             });
             res.json({ signal });
@@ -648,7 +654,7 @@ Respond with JSON only in this exact format:
                 resistance: recent20High
             };
             // Store AI signal
-            let signal = await storage.createAiSignal({
+            let signal = await storage_1.storage.createAiSignal({
                 symbol, // Store normalized symbol (BTCUSD, not XXBTZUSD)
                 signal: analysis.signal,
                 confidence: analysis.confidence,
@@ -662,7 +668,7 @@ Respond with JSON only in this exact format:
             });
             // Set expiration time (24 hours from now)
             const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-            signal = await storage.updateAiSignal(signal.id, { expiresAt });
+            signal = await storage_1.storage.updateAiSignal(signal.id, { expiresAt });
             res.json({ signal, analysis, indicators });
         }
         catch (error) {
@@ -715,15 +721,15 @@ Respond with JSON only in this exact format:
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
-            const portfolio = await storage.getPortfolio(user.id);
+            const portfolio = await storage_1.storage.getPortfolio(user.id);
             if (!portfolio) {
                 return res.status(404).json({ error: 'Portfolio not found' });
             }
-            const tradeData = insertTradeSchema.parse({
+            const tradeData = schema_1.insertTradeSchema.parse({
                 userId: user.id,
                 portfolioId: portfolio.id,
                 ...req.body
@@ -761,7 +767,7 @@ Respond with JSON only in this exact format:
             let trade;
             if (user.isDemo) {
                 // Demo mode - simulate trade execution
-                trade = await storage.createTrade({
+                trade = await storage_1.storage.createTrade({
                     userId: user.id,
                     portfolioId: portfolio.id,
                     symbol: tradeData.symbol,
@@ -787,19 +793,19 @@ Respond with JSON only in this exact format:
                     // Deduct cash, increase trading balance
                     const newAvailable = availableBalance - value;
                     const newTrading = tradingBalance + value;
-                    await storage.updatePortfolio(portfolio.id, {
+                    await storage_1.storage.updatePortfolio(portfolio.id, {
                         availableBalance: newAvailable.toString(),
                         tradingBalance: newTrading.toString(),
                         totalBalance: (newAvailable + newTrading).toString()
                     });
                     // Create or update holding
-                    const existingHolding = await storage.getHoldingBySymbol(portfolio.id, tradeData.symbol);
+                    const existingHolding = await storage_1.storage.getHoldingBySymbol(portfolio.id, tradeData.symbol);
                     if (existingHolding) {
                         // Update existing holding with new average price
                         const currentValue = parseFloat(existingHolding.amount) * parseFloat(existingHolding.averagePrice);
                         const newTotalAmount = parseFloat(existingHolding.amount) + amount;
                         const newAveragePrice = ((currentValue + value) / newTotalAmount).toFixed(6);
-                        await storage.updateHolding(existingHolding.id, {
+                        await storage_1.storage.updateHolding(existingHolding.id, {
                             amount: newTotalAmount.toString(),
                             averagePrice: newAveragePrice,
                             currentPrice: tradeData.price,
@@ -808,7 +814,7 @@ Respond with JSON only in this exact format:
                     }
                     else {
                         // Create new holding
-                        await storage.createHolding({
+                        await storage_1.storage.createHolding({
                             portfolioId: portfolio.id,
                             symbol: tradeData.symbol,
                             amount: tradeData.amount,
@@ -822,22 +828,22 @@ Respond with JSON only in this exact format:
                     // Add cash from sale, reduce trading balance
                     const newAvailable = availableBalance + value;
                     const newTrading = Math.max(0, tradingBalance - value);
-                    await storage.updatePortfolio(portfolio.id, {
+                    await storage_1.storage.updatePortfolio(portfolio.id, {
                         availableBalance: newAvailable.toString(),
                         tradingBalance: newTrading.toString(),
                         totalBalance: (newAvailable + newTrading).toString()
                     });
                     // Update or remove holding
-                    const existingHolding = await storage.getHoldingBySymbol(portfolio.id, tradeData.symbol);
+                    const existingHolding = await storage_1.storage.getHoldingBySymbol(portfolio.id, tradeData.symbol);
                     if (existingHolding) {
                         const newAmount = parseFloat(existingHolding.amount) - amount;
                         if (newAmount <= 0) {
                             // Remove holding if sold completely
-                            await storage.deleteHolding(existingHolding.id);
+                            await storage_1.storage.deleteHolding(existingHolding.id);
                         }
                         else {
                             // Update holding with reduced amount
-                            await storage.updateHolding(existingHolding.id, {
+                            await storage_1.storage.updateHolding(existingHolding.id, {
                                 amount: newAmount.toString(),
                                 currentPrice: tradeData.price,
                                 value: (newAmount * parseFloat(tradeData.price)).toFixed(2)
@@ -864,7 +870,7 @@ Respond with JSON only in this exact format:
                 if (orderResult.error && orderResult.error.length > 0) {
                     return res.status(400).json({ error: orderResult.error[0] });
                 }
-                trade = await storage.createTrade({
+                trade = await storage_1.storage.createTrade({
                     userId: user.id,
                     portfolioId: portfolio.id,
                     symbol: tradeData.symbol,
@@ -893,7 +899,7 @@ Respond with JSON only in this exact format:
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
@@ -906,7 +912,7 @@ Respond with JSON only in this exact format:
             const sortBy = req.query.sortBy || 'createdAt';
             const sortOrder = req.query.sortOrder || 'desc';
             // Fetch database trades
-            let dbTrades = await storage.getTrades(user.id, 1000); // Get more for merging
+            let dbTrades = await storage_1.storage.getTrades(user.id, 1000); // Get more for merging
             // For live mode users with Kraken credentials, fetch and merge Kraken trade history
             if (!user.isDemo && user.krakenApiKey && user.krakenApiSecret) {
                 try {
@@ -986,11 +992,11 @@ Respond with JSON only in this exact format:
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
-            const strategies = await storage.getUserStrategies(user.id);
+            const strategies = await storage_1.storage.getUserStrategies(user.id);
             res.json({ strategies });
         }
         catch (error) {
@@ -1003,14 +1009,14 @@ Respond with JSON only in this exact format:
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
             // Validate request body
-            const settingsSchema = z.object({
-                apiKey: z.string().min(1, 'API key is required'),
-                apiSecret: z.string().min(1, 'API secret is required')
+            const settingsSchema = zod_1.z.object({
+                apiKey: zod_1.z.string().min(1, 'API key is required'),
+                apiSecret: zod_1.z.string().min(1, 'API secret is required')
             });
             const { apiKey, apiSecret } = settingsSchema.parse(req.body);
             // Test API keys by making a balance request
@@ -1018,7 +1024,7 @@ Respond with JSON only in this exact format:
             if (balanceResult.error && balanceResult.error.length > 0) {
                 return res.status(400).json({ error: 'Invalid API keys' });
             }
-            await storage.updateUser(user.id, {
+            await storage_1.storage.updateUser(user.id, {
                 krakenApiKey: apiKey,
                 krakenApiSecret: apiSecret
             });
@@ -1033,19 +1039,19 @@ Respond with JSON only in this exact format:
             if (!req.firebaseUid) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const user = await storage.getUserByFirebaseUid(req.firebaseUid);
+            const user = await storage_1.storage.getUserByFirebaseUid(req.firebaseUid);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
             // Validate request body
-            const modeSchema = z.object({
-                isDemo: z.boolean()
+            const modeSchema = zod_1.z.object({
+                isDemo: zod_1.z.boolean()
             });
             const { isDemo } = modeSchema.parse(req.body);
-            await storage.updateUser(user.id, { isDemo });
-            const portfolio = await storage.getPortfolio(user.id);
+            await storage_1.storage.updateUser(user.id, { isDemo });
+            const portfolio = await storage_1.storage.getPortfolio(user.id);
             if (portfolio) {
-                await storage.updatePortfolio(portfolio.id, { isDemo });
+                await storage_1.storage.updatePortfolio(portfolio.id, { isDemo });
             }
             res.json({ success: true });
         }

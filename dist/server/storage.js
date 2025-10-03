@@ -1,52 +1,55 @@
-import { users, portfolios, holdings, trades, aiSignals, tradingStrategies } from "@shared/schema";
-import { randomUUID } from "crypto";
-import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
-export class PostgreSQLStorage {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.storage = exports.MemStorage = exports.PostgreSQLStorage = void 0;
+const schema_1 = require("@shared/schema");
+const crypto_1 = require("crypto");
+const db_1 = require("./db");
+const drizzle_orm_1 = require("drizzle-orm");
+class PostgreSQLStorage {
     // User operations
     async getUser(id) {
-        const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+        const result = await db_1.db.select().from(schema_1.users).where((0, drizzle_orm_1.eq)(schema_1.users.id, id)).limit(1);
         return result[0];
     }
     async getUserByFirebaseUid(firebaseUid) {
-        const result = await db.select().from(users).where(eq(users.firebaseUid, firebaseUid)).limit(1);
+        const result = await db_1.db.select().from(schema_1.users).where((0, drizzle_orm_1.eq)(schema_1.users.firebaseUid, firebaseUid)).limit(1);
         return result[0];
     }
     async createUser(insertUser) {
-        const result = await db.insert(users).values(insertUser).returning();
+        const result = await db_1.db.insert(schema_1.users).values(insertUser).returning();
         return result[0];
     }
     async updateUser(id, updates) {
-        const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+        const result = await db_1.db.update(schema_1.users).set(updates).where((0, drizzle_orm_1.eq)(schema_1.users.id, id)).returning();
         if (!result[0])
             throw new Error("User not found");
         return result[0];
     }
     // Portfolio operations
     async getPortfolio(userId) {
-        const result = await db.select().from(portfolios).where(eq(portfolios.userId, userId)).limit(1);
+        const result = await db_1.db.select().from(schema_1.portfolios).where((0, drizzle_orm_1.eq)(schema_1.portfolios.userId, userId)).limit(1);
         return result[0];
     }
     async createPortfolio(insertPortfolio) {
-        const result = await db.insert(portfolios).values(insertPortfolio).returning();
+        const result = await db_1.db.insert(schema_1.portfolios).values(insertPortfolio).returning();
         return result[0];
     }
     async updatePortfolio(id, updates) {
-        const result = await db.update(portfolios).set({
+        const result = await db_1.db.update(schema_1.portfolios).set({
             ...updates,
             updatedAt: new Date()
-        }).where(eq(portfolios.id, id)).returning();
+        }).where((0, drizzle_orm_1.eq)(schema_1.portfolios.id, id)).returning();
         if (!result[0])
             throw new Error("Portfolio not found");
         return result[0];
     }
     // Holdings operations
     async getHoldings(portfolioId) {
-        return await db.select().from(holdings).where(eq(holdings.portfolioId, portfolioId));
+        return await db_1.db.select().from(schema_1.holdings).where((0, drizzle_orm_1.eq)(schema_1.holdings.portfolioId, portfolioId));
     }
     async getHolding(portfolioId, symbol) {
-        const result = await db.select().from(holdings)
-            .where(and(eq(holdings.portfolioId, portfolioId), eq(holdings.symbol, symbol)))
+        const result = await db_1.db.select().from(schema_1.holdings)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.holdings.portfolioId, portfolioId), (0, drizzle_orm_1.eq)(schema_1.holdings.symbol, symbol)))
             .limit(1);
         return result[0];
     }
@@ -54,30 +57,30 @@ export class PostgreSQLStorage {
         return this.getHolding(portfolioId, symbol);
     }
     async createHolding(insertHolding) {
-        const result = await db.insert(holdings).values(insertHolding).returning();
+        const result = await db_1.db.insert(schema_1.holdings).values(insertHolding).returning();
         return result[0];
     }
     async updateHolding(id, updates) {
-        const result = await db.update(holdings).set({
+        const result = await db_1.db.update(schema_1.holdings).set({
             ...updates,
             updatedAt: new Date()
-        }).where(eq(holdings.id, id)).returning();
+        }).where((0, drizzle_orm_1.eq)(schema_1.holdings.id, id)).returning();
         if (!result[0])
             throw new Error("Holding not found");
         return result[0];
     }
     async deleteHolding(id) {
-        await db.delete(holdings).where(eq(holdings.id, id));
+        await db_1.db.delete(schema_1.holdings).where((0, drizzle_orm_1.eq)(schema_1.holdings.id, id));
     }
     // Trade operations
     async getTrades(userId, limit = 50) {
-        return await db.select().from(trades)
-            .where(eq(trades.userId, userId))
-            .orderBy(desc(trades.createdAt))
+        return await db_1.db.select().from(schema_1.trades)
+            .where((0, drizzle_orm_1.eq)(schema_1.trades.userId, userId))
+            .orderBy((0, drizzle_orm_1.desc)(schema_1.trades.createdAt))
             .limit(limit);
     }
     async createTrade(insertTrade) {
-        const result = await db.insert(trades).values(insertTrade).returning();
+        const result = await db_1.db.insert(schema_1.trades).values(insertTrade).returning();
         return result[0];
     }
     async updateTrade(id, updates) {
@@ -85,7 +88,7 @@ export class PostgreSQLStorage {
         if (updates.status === 'filled') {
             updateData.filledAt = new Date();
         }
-        const result = await db.update(trades).set(updateData).where(eq(trades.id, id)).returning();
+        const result = await db_1.db.update(schema_1.trades).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.trades.id, id)).returning();
         if (!result[0])
             throw new Error("Trade not found");
         return result[0];
@@ -93,39 +96,39 @@ export class PostgreSQLStorage {
     // AI Signal operations
     async getActiveSignals(symbol) {
         if (symbol) {
-            return await db.select().from(aiSignals)
-                .where(and(eq(aiSignals.isActive, true), eq(aiSignals.symbol, symbol)))
-                .orderBy(desc(aiSignals.createdAt));
+            return await db_1.db.select().from(schema_1.aiSignals)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.aiSignals.isActive, true), (0, drizzle_orm_1.eq)(schema_1.aiSignals.symbol, symbol)))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.aiSignals.createdAt));
         }
-        return await db.select().from(aiSignals)
-            .where(eq(aiSignals.isActive, true))
-            .orderBy(desc(aiSignals.createdAt));
+        return await db_1.db.select().from(schema_1.aiSignals)
+            .where((0, drizzle_orm_1.eq)(schema_1.aiSignals.isActive, true))
+            .orderBy((0, drizzle_orm_1.desc)(schema_1.aiSignals.createdAt));
     }
     async createAiSignal(insertSignal) {
-        const result = await db.insert(aiSignals).values(insertSignal).returning();
+        const result = await db_1.db.insert(schema_1.aiSignals).values(insertSignal).returning();
         return result[0];
     }
     async updateAiSignal(id, updates) {
-        const result = await db.update(aiSignals).set(updates).where(eq(aiSignals.id, id)).returning();
+        const result = await db_1.db.update(schema_1.aiSignals).set(updates).where((0, drizzle_orm_1.eq)(schema_1.aiSignals.id, id)).returning();
         if (!result[0])
             throw new Error("AI Signal not found");
         return result[0];
     }
     async getAllSignals(options) {
-        let query = db.select().from(aiSignals);
+        let query = db_1.db.select().from(schema_1.aiSignals);
         const conditions = [];
         if (options?.symbol) {
-            conditions.push(eq(aiSignals.symbol, options.symbol));
+            conditions.push((0, drizzle_orm_1.eq)(schema_1.aiSignals.symbol, options.symbol));
         }
         if (!options?.includeInactive) {
-            conditions.push(eq(aiSignals.isActive, true));
+            conditions.push((0, drizzle_orm_1.eq)(schema_1.aiSignals.isActive, true));
         }
         if (conditions.length > 0) {
             // @ts-ignore
-            query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+            query = query.where(conditions.length === 1 ? conditions[0] : (0, drizzle_orm_1.and)(...conditions));
         }
         // @ts-ignore
-        query = query.orderBy(desc(aiSignals.createdAt));
+        query = query.orderBy((0, drizzle_orm_1.desc)(schema_1.aiSignals.createdAt));
         if (options?.limit) {
             // @ts-ignore
             query = query.limit(options.limit);
@@ -134,24 +137,25 @@ export class PostgreSQLStorage {
     }
     // Trading Strategy operations
     async getUserStrategies(userId) {
-        return await db.select().from(tradingStrategies).where(eq(tradingStrategies.userId, userId));
+        return await db_1.db.select().from(schema_1.tradingStrategies).where((0, drizzle_orm_1.eq)(schema_1.tradingStrategies.userId, userId));
     }
     async createTradingStrategy(insertStrategy) {
-        const result = await db.insert(tradingStrategies).values(insertStrategy).returning();
+        const result = await db_1.db.insert(schema_1.tradingStrategies).values(insertStrategy).returning();
         return result[0];
     }
     async updateTradingStrategy(id, updates) {
-        const result = await db.update(tradingStrategies).set({
+        const result = await db_1.db.update(schema_1.tradingStrategies).set({
             ...updates,
             updatedAt: new Date()
-        }).where(eq(tradingStrategies.id, id)).returning();
+        }).where((0, drizzle_orm_1.eq)(schema_1.tradingStrategies.id, id)).returning();
         if (!result[0])
             throw new Error("Trading Strategy not found");
         return result[0];
     }
 }
+exports.PostgreSQLStorage = PostgreSQLStorage;
 // Keep the in-memory implementation for backwards compatibility
-export class MemStorage {
+class MemStorage {
     users = new Map();
     portfolios = new Map();
     holdings = new Map();
@@ -166,7 +170,7 @@ export class MemStorage {
         return Array.from(this.users.values()).find(user => user.firebaseUid === firebaseUid);
     }
     async createUser(insertUser) {
-        const id = randomUUID();
+        const id = (0, crypto_1.randomUUID)();
         const user = {
             ...insertUser,
             displayName: insertUser.displayName || null,
@@ -194,7 +198,7 @@ export class MemStorage {
         return Array.from(this.portfolios.values()).find(p => p.userId === userId);
     }
     async createPortfolio(insertPortfolio) {
-        const id = randomUUID();
+        const id = (0, crypto_1.randomUUID)();
         const portfolio = {
             ...insertPortfolio,
             isDemo: insertPortfolio.isDemo ?? true,
@@ -228,7 +232,7 @@ export class MemStorage {
         return this.getHolding(portfolioId, symbol);
     }
     async createHolding(insertHolding) {
-        const id = randomUUID();
+        const id = (0, crypto_1.randomUUID)();
         const holding = {
             ...insertHolding,
             pnl: insertHolding.pnl || "0",
@@ -256,7 +260,7 @@ export class MemStorage {
         return userTrades.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
     }
     async createTrade(insertTrade) {
-        const id = randomUUID();
+        const id = (0, crypto_1.randomUUID)();
         const trade = {
             ...insertTrade,
             fee: insertTrade.fee || "0",
@@ -291,7 +295,7 @@ export class MemStorage {
         return signals.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     async createAiSignal(insertSignal) {
-        const id = randomUUID();
+        const id = (0, crypto_1.randomUUID)();
         const signal = {
             ...insertSignal,
             entryPrice: insertSignal.entryPrice || "0",
@@ -335,7 +339,7 @@ export class MemStorage {
         return Array.from(this.strategies.values()).filter(s => s.userId === userId);
     }
     async createTradingStrategy(insertStrategy) {
-        const id = randomUUID();
+        const id = (0, crypto_1.randomUUID)();
         const strategy = {
             ...insertStrategy,
             description: insertStrategy.description || null,
@@ -357,5 +361,6 @@ export class MemStorage {
         return updatedStrategy;
     }
 }
+exports.MemStorage = MemStorage;
 // Use PostgreSQL storage for production
-export const storage = new PostgreSQLStorage();
+exports.storage = new PostgreSQLStorage();
