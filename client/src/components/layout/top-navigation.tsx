@@ -3,14 +3,59 @@ import { useTheme } from '@/contexts/theme-context';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Sun, Moon } from 'lucide-react';
+import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 export function TopNavigation() {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { toast } = useToast();
+  const [isSwitchingMode, setIsSwitchingMode] = useState(false);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
+  const handleModeToggle = async () => {
+    if (!user) return;
+    
+    setIsSwitchingMode(true);
+    try {
+      const token = localStorage.getItem('firebase-token');
+      const response = await fetch('/api/settings/mode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          isDemo: !user.isDemo
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: `Switched to ${user.isDemo ? 'Live' : 'Demo'} Mode`,
+          description: user.isDemo 
+            ? 'You are now trading with real funds. Trade carefully!' 
+            : 'You are now in demo mode with virtual funds.',
+        });
+        // Refresh the page to update the user state
+        window.location.reload();
+      } else {
+        throw new Error('Failed to switch mode');
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to switch trading mode. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSwitchingMode(false);
+    }
   };
 
   return (
@@ -29,9 +74,11 @@ export function TopNavigation() {
               size="sm"
               variant="outline"
               className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={handleModeToggle}
+              disabled={isSwitchingMode}
               data-testid="mode-toggle"
             >
-              Switch to {user?.isDemo ? 'Live' : 'Demo'}
+              {isSwitchingMode ? 'Switching...' : `Switch to ${user?.isDemo ? 'Live' : 'Demo'}`}
             </Button>
           </div>
         </div>
@@ -54,39 +101,42 @@ export function TopNavigation() {
               onClick={toggleTheme}
               data-testid="theme-toggle"
             >
-              <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-muted-foreground`}></i>
+              {theme === 'dark' ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
             </Button>
-            
-            <Button variant="ghost" size="sm" className="relative" data-testid="notifications">
-              <i className="fas fa-bell text-muted-foreground"></i>
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-destructive rounded-full text-xs"></span>
+
+            <Button variant="ghost" size="sm" data-testid="notifications">
+              <i className="far fa-bell text-muted-foreground"></i>
             </Button>
-            
-            <div className="flex items-center space-x-2 pl-3 border-l border-border">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={user?.photoURL || undefined} alt={user?.displayName || 'User'} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
+
+            <Button variant="ghost" size="sm" data-testid="settings">
+              <i className="fas fa-cog text-muted-foreground"></i>
+            </Button>
+
+            <div className="flex items-center space-x-2">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user?.photoURL || undefined} />
+                <AvatarFallback className="bg-primary text-primary-foreground">
                   {getInitials(user?.displayName)}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden md:block">
-                <div className="text-sm font-medium" data-testid="user-name">
-                  {user?.displayName || 'User'}
-                </div>
-                <div className="text-xs text-muted-foreground" data-testid="user-email">
-                  {user?.email}
-                </div>
+                <div className="text-sm font-medium">{user?.displayName || 'User'}</div>
+                <div className="text-xs text-muted-foreground">{user?.email}</div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={signOut}
-                data-testid="sign-out"
-                className="ml-2"
-              >
-                <i className="fas fa-sign-out-alt text-muted-foreground"></i>
-              </Button>
             </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              data-testid="sign-out"
+            >
+              <i className="fas fa-sign-out-alt text-muted-foreground"></i>
+            </Button>
           </div>
         </div>
       </div>
