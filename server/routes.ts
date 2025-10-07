@@ -12,8 +12,12 @@ import { getAuth } from "firebase-admin/auth";
 // Initialize Firebase Admin SDK
 if (getApps().length === 0) {
   // For demo/development - initialize with project ID from environment
+
+  console.log("FIREBASE_PROJECT_ID:", process.env.FIREBASE_PROJECT_ID);
+
+  
   initializeApp({
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID
+    projectId: process.env.FIREBASE_PROJECT_ID
   });
 }
 
