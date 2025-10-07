@@ -16,8 +16,9 @@ const auth_1 = require("firebase-admin/auth");
 // Initialize Firebase Admin SDK
 if ((0, app_1.getApps)().length === 0) {
     // For demo/development - initialize with project ID from environment
+    console.log("FIREBASE_PROJECT_ID:", process.env.FIREBASE_PROJECT_ID);
     (0, app_1.initializeApp)({
-        projectId: process.env.VITE_FIREBASE_PROJECT_ID
+        projectId: process.env.FIREBASE_PROJECT_ID
     });
 }
 const adminAuth = (0, auth_1.getAuth)();
