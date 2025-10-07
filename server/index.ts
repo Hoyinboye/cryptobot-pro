@@ -74,7 +74,7 @@ console.log("NODE_ENV value:", process.env.NODE_ENV);
   }
 
   const port = parseInt(process.env.PORT || '3000', 10);
-  server.listen(port, 'localhost', () => {
+  server.listen(port, '0.0.0.0', () => {
     log(`serving on port ${port}`);
   });
 })();

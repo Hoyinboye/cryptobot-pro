@@ -68,7 +68,7 @@ app.use((req, res, next) => {
         (0, vite_1.serveStatic)(app);
     }
     const port = parseInt(process.env.PORT || '3000', 10);
-    server.listen(port, 'localhost', () => {
+    server.listen(port, '0.0.0.0', () => {
         (0, vite_1.log)(`serving on port ${port}`);
     });
 })();
