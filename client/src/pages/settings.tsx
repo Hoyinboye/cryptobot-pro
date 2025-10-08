@@ -28,6 +28,9 @@ export default function Settings() {
   const [maxPositionSize, setMaxPositionSize] = useState('');
   const [maxDailyLoss, setMaxDailyLoss] = useState('');
   const [maxOpenPositions, setMaxOpenPositions] = useState('');
+  const [krakenApiKey, setKrakenApiKey] = useState('');
+  const [krakenApiSecret, setKrakenApiSecret] = useState('');
+  const [sandboxMode, setSandboxMode] = useState(false);
 
   // Sync local state with loaded user data
   useEffect(() => {
@@ -66,6 +69,49 @@ export default function Settings() {
       maxPositionSize: maxPositionSize,
       maxDailyLoss: maxDailyLoss,
       maxOpenPositions: maxOpenPositions,
+    });
+  };
+
+  const saveKrakenKeysMutation = useMutation({
+    mutationFn: async (payload: { apiKey: string; apiSecret: string }) => {
+      const response = await apiRequest('POST', '/api/settings/kraken', payload);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Kraken Connected',
+        description: 'API credentials saved and balances refreshed.',
+      });
+      setKrakenApiKey('');
+      setKrakenApiSecret('');
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to Save API Keys',
+        description: error.message || 'Unable to verify the provided credentials.',
+        variant: 'destructive',
+      });
+    }
+  });
+
+  const handleSaveApiKeys = () => {
+    const trimmedKey = krakenApiKey.trim();
+    const trimmedSecret = krakenApiSecret.trim();
+
+    if (!trimmedKey || !trimmedSecret) {
+      toast({
+        title: 'Missing Credentials',
+        description: 'Please provide both the Kraken API key and secret.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    saveKrakenKeysMutation.mutate({
+      apiKey: trimmedKey,
+      apiSecret: trimmedSecret,
     });
   };
 
@@ -429,7 +475,10 @@ export default function Settings() {
                 <Input
                   id="kraken-api-key"
                   type="password"
+                  value={krakenApiKey}
+                  onChange={(event) => setKrakenApiKey(event.target.value)}
                   placeholder="Enter your Kraken API key"
+                  autoComplete="off"
                   data-testid="kraken-api-key-input"
                 />
                 <p className="text-sm text-muted-foreground mt-1">
@@ -442,7 +491,10 @@ export default function Settings() {
                 <Input
                   id="kraken-secret"
                   type="password"
+                  value={krakenApiSecret}
+                  onChange={(event) => setKrakenApiSecret(event.target.value)}
                   placeholder="Enter your Kraken API secret"
+                  autoComplete="off"
                   data-testid="kraken-secret-input"
                 />
               </div>
@@ -454,11 +506,19 @@ export default function Settings() {
                     Use Kraken sandbox for testing
                   </p>
                 </div>
-                <Switch defaultChecked data-testid="sandbox-mode-switch" />
+                <Switch
+                  checked={sandboxMode}
+                  onCheckedChange={setSandboxMode}
+                  data-testid="sandbox-mode-switch"
+                />
               </div>
 
-              <Button data-testid="save-api-keys-btn">
-                Save API Keys
+              <Button
+                onClick={handleSaveApiKeys}
+                disabled={saveKrakenKeysMutation.isPending}
+                data-testid="save-api-keys-btn"
+              >
+                {saveKrakenKeysMutation.isPending ? 'Saving...' : 'Save API Keys'}
               </Button>
             </CardContent>
           </Card>

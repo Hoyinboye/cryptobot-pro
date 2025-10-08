@@ -26,27 +26,43 @@ export function ThemeProvider({
   defaultTheme = 'dark',
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem('theme') as Theme) || defaultTheme
-  );
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const storedTheme = localStorage.getItem('theme') as Theme | null;
+    if (storedTheme) {
+      setThemeState(storedTheme);
+    } else {
+      setThemeState(defaultTheme);
+    }
+  }, [defaultTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
     root.setAttribute('data-theme', theme);
   }, [theme]);
 
+  const persistTheme = (value: Theme) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', value);
+    }
+    setThemeState(value);
+  };
+
   const value = {
     theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem('theme', theme);
-      setTheme(theme);
-    },
+    setTheme: (theme: Theme) => persistTheme(theme),
     toggleTheme: () => {
       const newTheme = theme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('theme', newTheme);
-      setTheme(newTheme);
+      persistTheme(newTheme);
     },
   };
 
