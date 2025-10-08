@@ -125,7 +125,7 @@ exports.insertTradeSchema = zod_1.z.object({
     type: zod_1.z.string(), // REQUIRED
     amount: zod_1.z.string(), // REQUIRED
     price: zod_1.z.string(), // REQUIRED
-    status: zod_1.z.string(), // REQUIRED
+    status: zod_1.z.enum(["pending", "filled", "cancelled"]).default("pending"), // Default to pending if not provided
     fee: zod_1.z.string().optional(),
     isDemo: zod_1.z.boolean().optional(),
     isAiGenerated: zod_1.z.boolean().optional(),

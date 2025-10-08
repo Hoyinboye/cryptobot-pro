@@ -132,7 +132,7 @@ export const insertTradeSchema = z.object({
   type: z.string(), // REQUIRED
   amount: z.string(), // REQUIRED
   price: z.string(), // REQUIRED
-  status: z.string(), // REQUIRED
+  status: z.enum(["pending", "filled", "cancelled"]).default("pending"), // Default to pending if not provided
   fee: z.string().optional(),
   isDemo: z.boolean().optional(),
   isAiGenerated: z.boolean().optional(),

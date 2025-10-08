@@ -8,12 +8,12 @@ export default defineConfig({
     alias: {
       "@": path.resolve(process.cwd(), "client", "src"),
       "@shared": path.resolve(process.cwd(), "shared"),
-      "@assets": path.resolve(process.cwd(), "attached_assets"),
+      "@db": path.resolve(process.cwd(), "db"),
     },
   },
   root: path.resolve(process.cwd(), "client"),
   build: {
-    outDir: path.resolve(process.cwd(), "dist/public"),
+    outDir: path.resolve(process.cwd(), "dist/server/public"),  // ← FIXED!
     emptyOutDir: true,
   },
   server: {
