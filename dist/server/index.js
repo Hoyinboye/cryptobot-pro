@@ -7,12 +7,33 @@ require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const routes_1 = require("./routes");
 const vite_1 = require("./vite");
+const cors_1 = __importDefault(require("cors"));
 const allowedOrigins = [
     'http://localhost:5173',
     'https://cryptointeltrade.web.app',
     'https://cryptointeltrade.firebaseapp.com'
 ];
+const dynamicOrigins = [
+    process.env.RENDER_EXTERNAL_URL,
+    process.env.FRONTEND_ORIGIN,
+    process.env.API_BASE_URL
+].filter((origin) => typeof origin === 'string' && origin.length > 0);
+for (const origin of dynamicOrigins) {
+    if (!allowedOrigins.includes(origin)) {
+        allowedOrigins.push(origin);
+    }
+}
 const app = (0, express_1.default)();
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true
+};
+app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: false }));
 app.use((req, res, next) => {
