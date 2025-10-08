@@ -13,6 +13,9 @@ const crypto_1 = __importDefault(require("crypto"));
 const zod_1 = require("zod");
 const app_1 = require("firebase-admin/app");
 const auth_1 = require("firebase-admin/auth");
+const secure_storage_1 = require("./secure-storage");
+const kraken_symbols_1 = require("./kraken-symbols");
+const kraken_stub_1 = require("./kraken-stub");
 // Initialize Firebase Admin SDK
 if ((0, app_1.getApps)().length === 0) {
     // For demo/development - initialize with project ID from environment
@@ -30,17 +33,31 @@ function getKrakenSignature(path, request, secret, nonce) {
     hmac.update(path + hash);
     return hmac.digest('base64');
 }
+let lastPrivateNonce = 0n;
+function nextPrivateNonce() {
+    const now = BigInt(Date.now()) * 1000n;
+    if (now > lastPrivateNonce) {
+        lastPrivateNonce = now;
+    }
+    else {
+        lastPrivateNonce += 1n;
+    }
+    return lastPrivateNonce;
+}
 async function krakenRequest(endpoint, data = {}, apiKey, apiSecret) {
+    if ((0, kraken_stub_1.isKrakenStubEnabled)()) {
+        return (0, kraken_stub_1.handleStubbedRequest)(endpoint, data, apiKey, apiSecret);
+    }
     const baseUrl = 'https://api.kraken.com';
     if (apiKey && apiSecret) {
         // Private API call
-        const nonce = Date.now() * 1000;
+        const nonce = nextPrivateNonce().toString();
         const postDataObj = {
-            nonce: nonce.toString(),
+            nonce,
             ...data
         };
         const postData = new URLSearchParams(postDataObj).toString();
-        const signature = getKrakenSignature(endpoint, postData, apiSecret, nonce.toString());
+        const signature = getKrakenSignature(endpoint, postData, apiSecret, nonce);
         const response = await fetch(`${baseUrl}${endpoint}`, {
             method: 'POST',
             headers: {
@@ -71,24 +88,42 @@ function getOpenAI() {
     }
     return openaiClient;
 }
-// Symbol mapping for Kraken API compatibility
-const SYMBOL_MAP = {
-    'BTCUSD': 'XXBTZUSD',
-    'ETHUSD': 'XETHZUSD',
-    'ADAUSD': 'ADAUSD',
-    'SOLUSD': 'SOLUSD',
-    'DOTUSD': 'DOTUSD',
-    'LINKUSD': 'LINKUSD'
+const DEFAULT_SYMBOL_LIST = (process.env.SUPPORTED_SYMBOLS || 'BTCUSD,ETHUSD,ADAUSD,SOLUSD,DOTUSD,LINKUSD')
+    .split(',')
+    .map(symbol => symbol.trim().toUpperCase())
+    .filter(Boolean);
+const LEGACY_SYMBOL_MAP = {
+    BTCUSD: 'XXBTZUSD',
+    ETHUSD: 'XETHZUSD',
+    ADAUSD: 'ADAUSD',
+    SOLUSD: 'SOLUSD',
+    DOTUSD: 'DOTUSD',
+    LINKUSD: 'LINKUSD'
 };
-// Reverse mapping for display
-const DISPLAY_MAP = {
-    'XXBTZUSD': 'BTCUSD',
-    'XETHZUSD': 'ETHUSD',
-    'ADAUSD': 'ADAUSD',
-    'SOLUSD': 'SOLUSD',
-    'DOTUSD': 'DOTUSD',
-    'LINKUSD': 'LINKUSD'
-};
+async function resolveKrakenSymbol(symbol) {
+    const normalized = symbol?.replace(/[^A-Za-z]/g, '').toUpperCase();
+    if (!normalized) {
+        return null;
+    }
+    return await (0, kraken_symbols_1.getKrakenSymbol)(normalized);
+}
+async function resolveDisplaySymbol(krakenPair) {
+    return await (0, kraken_symbols_1.getDisplaySymbol)(krakenPair);
+}
+async function getPreferredKrakenPairs() {
+    const pairs = await (0, kraken_symbols_1.resolveKrakenPairs)(DEFAULT_SYMBOL_LIST);
+    if (pairs.length > 0) {
+        return pairs;
+    }
+    const popular = await (0, kraken_symbols_1.getPopularPairs)(6);
+    if (popular.length > 0) {
+        return popular;
+    }
+    const legacy = DEFAULT_SYMBOL_LIST
+        .map(symbol => LEGACY_SYMBOL_MAP[symbol])
+        .filter(Boolean);
+    return Array.from(new Set(legacy));
+}
 async function validateRiskLimits(userId, portfolioId, tradeValue, tradeSide, symbol, riskSettings) {
     // If risk management is disabled, allow all trades
     if (!riskSettings.enabled) {
@@ -171,8 +206,21 @@ async function getKrakenTradeHistory(apiKey, apiSecret, options = {}) {
         const transformedTrades = [];
         for (const [orderId, order] of Object.entries(orders)) {
             const orderData = order;
-            // Transform Kraken order to our Trade format
-            const symbol = DISPLAY_MAP[orderData.descr.pair] || orderData.descr.pair;
+            const rawPair = orderData.descr?.pair || orderData.descr?.altname || orderId;
+            let symbol = null;
+            try {
+                symbol = await resolveDisplaySymbol(rawPair);
+                if (!symbol && orderData.descr?.altname) {
+                    symbol = (0, kraken_symbols_1.displayFromAltname)(orderData.descr.altname);
+                }
+                if (!symbol && orderData.descr?.base && orderData.descr?.quote) {
+                    symbol = (0, kraken_symbols_1.displayFromAssets)(orderData.descr.base, orderData.descr.quote);
+                }
+            }
+            catch (resolutionError) {
+                console.error('Failed to resolve display symbol for Kraken pair:', rawPair, resolutionError);
+            }
+            const displaySymbol = symbol || rawPair;
             const side = orderData.descr.type;
             const type = orderData.descr.ordertype;
             const amount = orderData.vol;
@@ -181,7 +229,7 @@ async function getKrakenTradeHistory(apiKey, apiSecret, options = {}) {
             transformedTrades.push({
                 id: orderId,
                 krakenOrderId: orderId,
-                symbol,
+                symbol: displaySymbol,
                 side,
                 type,
                 amount,
@@ -379,7 +427,11 @@ async function registerRoutes(app) {
     app.get('/api/market/ticker/:symbol', async (req, res) => {
         try {
             const { symbol } = req.params;
-            const krakenSymbol = SYMBOL_MAP[symbol] || symbol;
+            const normalizedSymbol = symbol?.toUpperCase() || '';
+            const krakenSymbol = await resolveKrakenSymbol(normalizedSymbol);
+            if (!krakenSymbol) {
+                return res.status(404).json({ error: `Unsupported trading pair: ${symbol}` });
+            }
             const data = await krakenRequest(`/0/public/Ticker?pair=${krakenSymbol}`);
             // Normalize Kraken response to expected format
             if (data.error && data.error.length > 0) {
@@ -391,6 +443,7 @@ async function registerRoutes(app) {
             if (!tickerData) {
                 return res.status(404).json({ error: 'Symbol not found' });
             }
+            const displaySymbol = await resolveDisplaySymbol(pairKey) || normalizedSymbol;
             // Extract relevant data from Kraken format
             // c = last trade closed array [price, lot volume]
             // v = volume array [today, 24h]
@@ -402,7 +455,7 @@ async function registerRoutes(app) {
             const change24h = currentPrice - openPrice;
             const changePercent = openPrice > 0 ? ((change24h / openPrice) * 100).toFixed(2) : '0.00';
             const normalizedResponse = {
-                symbol: symbol,
+                symbol: displaySymbol,
                 price: currentPrice.toFixed(2),
                 change24h: change24h.toFixed(2),
                 changePercent: changePercent,
@@ -418,24 +471,17 @@ async function registerRoutes(app) {
     });
     app.get('/api/market/tickers', async (req, res) => {
         try {
-            // Curated list of popular trading pairs for reliable data
-            const pairs = 'XXBTZUSD,XETHZUSD,ADAUSD,SOLUSD,DOTUSD,LINKUSD';
-            const data = await krakenRequest(`/0/public/Ticker?pair=${pairs}`);
+            const pairs = await getPreferredKrakenPairs();
+            if (!pairs.length) {
+                return res.status(500).json({ error: 'No supported trading pairs available' });
+            }
+            const data = await krakenRequest(`/0/public/Ticker?pair=${pairs.join(',')}`);
             // Normalize Kraken response to expected format
             if (data.error && data.error.length > 0) {
                 return res.status(400).json({ error: data.error[0] });
             }
             const result = data.result;
             const normalizedTickers = [];
-            // Symbol mapping for cleaner frontend display
-            const symbolMap = {
-                'XXBTZUSD': 'BTCUSD',
-                'XETHZUSD': 'ETHUSD',
-                'ADAUSD': 'ADAUSD',
-                'SOLUSD': 'SOLUSD',
-                'DOTUSD': 'DOTUSD',
-                'LINKUSD': 'LINKUSD'
-            };
             // Convert each ticker to normalized format
             for (const [pairKey, tickerData] of Object.entries(result)) {
                 if (tickerData && typeof tickerData === 'object') {
@@ -444,8 +490,9 @@ async function registerRoutes(app) {
                     const volume24h = parseFloat(tickerData.v[1]);
                     const change24h = currentPrice - openPrice;
                     const changePercent = openPrice > 0 ? ((change24h / openPrice) * 100).toFixed(2) : '0.00';
+                    const displaySymbol = await resolveDisplaySymbol(pairKey) || pairKey;
                     normalizedTickers.push({
-                        symbol: symbolMap[pairKey] || pairKey,
+                        symbol: displaySymbol,
                         price: currentPrice.toFixed(2),
                         change24h: change24h.toFixed(2),
                         changePercent: changePercent,
@@ -466,7 +513,11 @@ async function registerRoutes(app) {
         try {
             const { symbol } = req.params;
             const { interval = '60' } = req.query; // Default to 60 minutes (1 hour)
-            const krakenSymbol = SYMBOL_MAP[symbol] || symbol;
+            const normalizedSymbol = symbol?.toUpperCase() || '';
+            const krakenSymbol = await resolveKrakenSymbol(normalizedSymbol);
+            if (!krakenSymbol) {
+                return res.status(404).json({ error: `Unsupported trading pair: ${symbol}` });
+            }
             // Kraken OHLC intervals: 1, 5, 15, 30, 60, 240, 1440, 10080, 21600
             const data = await krakenRequest(`/0/public/OHLC?pair=${krakenSymbol}&interval=${interval}`);
             if (data.error && data.error.length > 0) {
@@ -542,9 +593,14 @@ async function registerRoutes(app) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
             const { symbol, timeframe = '60' } = req.body;
+            const normalizedSymbol = symbol?.toUpperCase() || '';
             // Map frontend symbol to Kraken format
-            const krakenSymbol = SYMBOL_MAP[symbol] || symbol;
+            const krakenSymbol = await resolveKrakenSymbol(normalizedSymbol);
+            if (!krakenSymbol) {
+                return res.status(400).json({ error: 'Invalid or unsupported symbol' });
+            }
             // Get current market ticker data
+            const displaySymbol = await resolveDisplaySymbol(krakenSymbol) || normalizedSymbol;
             const marketData = await krakenRequest(`/0/public/Ticker?pair=${krakenSymbol}`);
             if (marketData.error && marketData.error.length > 0) {
                 return res.status(400).json({ error: 'Invalid symbol' });
@@ -588,7 +644,7 @@ async function registerRoutes(app) {
             const recent20High = Math.max(...closes.slice(-20));
             const recent20Low = Math.min(...closes.slice(-20));
             // Prepare comprehensive analysis prompt
-            const analysisPrompt = `Analyze ${symbol} cryptocurrency and provide a professional trading recommendation.
+            const analysisPrompt = `Analyze ${displaySymbol} cryptocurrency and provide a professional trading recommendation.
 
 CURRENT MARKET DATA:
 - Current Price: $${currentPrice.toFixed(2)}
@@ -656,7 +712,7 @@ Respond with JSON only in this exact format:
             };
             // Store AI signal
             let signal = await storage_1.storage.createAiSignal({
-                symbol, // Store normalized symbol (BTCUSD, not XXBTZUSD)
+                symbol: displaySymbol, // Store normalized symbol (BTCUSD, not XXBTZUSD)
                 signal: analysis.signal,
                 confidence: analysis.confidence,
                 entryPrice: analysis.entryPrice?.toString() || currentPrice.toString(),
@@ -735,10 +791,14 @@ Respond with JSON only in this exact format:
                 portfolioId: portfolio.id,
                 ...req.body
             });
+            tradeData.symbol = tradeData.symbol.toUpperCase();
             // For market orders, fetch current price from Kraken
             let executionPrice = tradeData.price;
             if (tradeData.type === 'market' && (!executionPrice || executionPrice === '0')) {
-                const krakenSymbol = SYMBOL_MAP[tradeData.symbol] || tradeData.symbol;
+                const krakenSymbol = await resolveKrakenSymbol(tradeData.symbol);
+                if (!krakenSymbol) {
+                    return res.status(400).json({ error: `Unsupported trading pair: ${tradeData.symbol}` });
+                }
                 const tickerData = await krakenRequest(`/0/public/Ticker?pair=${krakenSymbol}`);
                 if (tickerData.error && tickerData.error.length > 0) {
                     return res.status(400).json({ error: 'Failed to fetch current market price' });
@@ -855,11 +915,24 @@ Respond with JSON only in this exact format:
             }
             else {
                 // Live mode - execute real trade via Kraken API
-                if (!user.krakenApiKey || !user.krakenApiSecret) {
+                let apiKey;
+                let apiSecret;
+                try {
+                    apiKey = user.krakenApiKey ? (0, secure_storage_1.decryptSensitive)(user.krakenApiKey) : null;
+                    apiSecret = user.krakenApiSecret ? (0, secure_storage_1.decryptSensitive)(user.krakenApiSecret) : null;
+                }
+                catch (decryptionError) {
+                    console.error('Failed to decrypt Kraken API credentials', decryptionError);
+                    return res.status(500).json({ error: 'Unable to access Kraken credentials. Please re-enter your API keys.' });
+                }
+                if (!apiKey || !apiSecret) {
                     return res.status(400).json({ error: 'Kraken API keys not configured' });
                 }
                 // Map user-friendly symbol to Kraken's internal pair code
-                const krakenSymbol = SYMBOL_MAP[tradeData.symbol] || tradeData.symbol;
+                const krakenSymbol = await resolveKrakenSymbol(tradeData.symbol);
+                if (!krakenSymbol) {
+                    return res.status(400).json({ error: `Unsupported trading pair: ${tradeData.symbol}` });
+                }
                 const orderData = {
                     pair: krakenSymbol,
                     type: tradeData.side,
@@ -867,7 +940,7 @@ Respond with JSON only in this exact format:
                     volume: tradeData.amount,
                     ...(tradeData.type === 'limit' ? { price: tradeData.price } : {})
                 };
-                const orderResult = await krakenRequest('/0/private/AddOrder', orderData, user.krakenApiKey, user.krakenApiSecret);
+                const orderResult = await krakenRequest('/0/private/AddOrder', orderData, apiKey, apiSecret);
                 if (orderResult.error && orderResult.error.length > 0) {
                     return res.status(400).json({ error: orderResult.error[0] });
                 }
@@ -884,7 +957,7 @@ Respond with JSON only in this exact format:
                     isDemo: tradeData.isDemo,
                     isAiGenerated: tradeData.isAiGenerated,
                     krakenOrderId: orderResult.result.txid[0],
-                    metadata: { kraken: true }
+                    metadata: { kraken: true, pair: krakenSymbol }
                 });
             }
             // Note: WebSocket broadcasting disabled for security - trade data should only be sent to authorized users
@@ -917,7 +990,9 @@ Respond with JSON only in this exact format:
             // For live mode users with Kraken credentials, fetch and merge Kraken trade history
             if (!user.isDemo && user.krakenApiKey && user.krakenApiSecret) {
                 try {
-                    const krakenTrades = await getKrakenTradeHistory(user.krakenApiKey, user.krakenApiSecret, {});
+                    const apiKey = (0, secure_storage_1.decryptSensitive)(user.krakenApiKey);
+                    const apiSecret = (0, secure_storage_1.decryptSensitive)(user.krakenApiSecret);
+                    const krakenTrades = await getKrakenTradeHistory(apiKey, apiSecret, {});
                     // Create a map of database trades by krakenOrderId for deduplication
                     const dbTradesByKrakenId = new Map(dbTrades
                         .filter(t => t.krakenOrderId)
@@ -1025,9 +1100,19 @@ Respond with JSON only in this exact format:
             if (balanceResult.error && balanceResult.error.length > 0) {
                 return res.status(400).json({ error: 'Invalid API keys' });
             }
+            let encryptedKey;
+            let encryptedSecret;
+            try {
+                encryptedKey = (0, secure_storage_1.encryptSensitive)(apiKey);
+                encryptedSecret = (0, secure_storage_1.encryptSensitive)(apiSecret);
+            }
+            catch (cryptoError) {
+                console.error('Failed to encrypt Kraken API keys', cryptoError);
+                return res.status(500).json({ error: 'Server-side encryption error. Please contact support before retrying.' });
+            }
             await storage_1.storage.updateUser(user.id, {
-                krakenApiKey: apiKey,
-                krakenApiSecret: apiSecret
+                krakenApiKey: encryptedKey,
+                krakenApiSecret: encryptedSecret
             });
             res.json({ success: true });
         }
@@ -1063,15 +1148,19 @@ Respond with JSON only in this exact format:
     // Real-time price updates from Kraken API via WebSocket
     async function fetchAndBroadcastPrices() {
         try {
-            const pairs = 'XXBTZUSD,XETHZUSD,ADAUSD,SOLUSD,DOTUSD,LINKUSD';
-            const data = await krakenRequest(`/0/public/Ticker?pair=${pairs}`);
+            const pairs = await getPreferredKrakenPairs();
+            if (!pairs.length) {
+                console.warn('No Kraken trading pairs available for price broadcast');
+                return;
+            }
+            const data = await krakenRequest(`/0/public/Ticker?pair=${pairs.join(',')}`);
             if (data.error && data.error.length > 0) {
                 console.error('Kraken API error:', data.error);
                 return;
             }
             const priceUpdates = {};
             for (const [krakenSymbol, tickerData] of Object.entries(data.result)) {
-                const displaySymbol = DISPLAY_MAP[krakenSymbol] || krakenSymbol;
+                const displaySymbol = await resolveDisplaySymbol(krakenSymbol) || krakenSymbol;
                 const ticker = tickerData;
                 priceUpdates[displaySymbol] = {
                     price: parseFloat(ticker.c[0]),
