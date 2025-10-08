@@ -92,14 +92,6 @@ const DEFAULT_SYMBOL_LIST = (process.env.SUPPORTED_SYMBOLS || 'BTCUSD,ETHUSD,ADA
     .split(',')
     .map(symbol => symbol.trim().toUpperCase())
     .filter(Boolean);
-const LEGACY_SYMBOL_MAP = {
-    BTCUSD: 'XXBTZUSD',
-    ETHUSD: 'XETHZUSD',
-    ADAUSD: 'ADAUSD',
-    SOLUSD: 'SOLUSD',
-    DOTUSD: 'DOTUSD',
-    LINKUSD: 'LINKUSD'
-};
 async function resolveKrakenSymbol(symbol) {
     const normalized = symbol?.replace(/[^A-Za-z]/g, '').toUpperCase();
     if (!normalized) {
@@ -120,9 +112,159 @@ async function getPreferredKrakenPairs() {
         return popular;
     }
     const legacy = DEFAULT_SYMBOL_LIST
-        .map(symbol => LEGACY_SYMBOL_MAP[symbol])
+        .map(symbol => kraken_symbols_1.LEGACY_SYMBOL_MAP[symbol])
         .filter(Boolean);
     return Array.from(new Set(legacy));
+}
+async function syncPortfolioFromKraken(user, portfolio, apiKey, apiSecret) {
+    try {
+        const balanceResponse = await krakenRequest('/0/private/Balance', {}, apiKey, apiSecret);
+        if (balanceResponse.error && balanceResponse.error.length > 0) {
+            console.error('Kraken balance error:', balanceResponse.error);
+            return;
+        }
+        const balances = balanceResponse.result || {};
+        const usdBalanceKeys = ['ZUSD', 'USD'];
+        let cashBalance = 0;
+        for (const key of usdBalanceKeys) {
+            if (balances[key]) {
+                const parsed = parseFloat(balances[key]);
+                if (!isNaN(parsed)) {
+                    cashBalance += parsed;
+                }
+            }
+        }
+        const assetEntries = [];
+        for (const [assetCode, amountRaw] of Object.entries(balances)) {
+            const amount = parseFloat(amountRaw);
+            if (!amount || amount <= 0) {
+                continue;
+            }
+            const normalizedAsset = (0, kraken_symbols_1.normalizeAsset)(assetCode);
+            if (!normalizedAsset) {
+                continue;
+            }
+            // Treat USD and USD-pegged stablecoins as cash
+            if (normalizedAsset === 'USD' || normalizedAsset === 'USDT' || normalizedAsset === 'USDC') {
+                cashBalance += amount;
+                continue;
+            }
+            assetEntries.push({
+                assetCode,
+                normalizedAsset,
+                amount
+            });
+        }
+        const holdingsToCreate = [];
+        const pairLookups = [];
+        for (const entry of assetEntries) {
+            let displaySymbol = `${entry.normalizedAsset}USD`;
+            let pair = await resolveKrakenSymbol(displaySymbol);
+            let quote = 'USD';
+            if (!pair) {
+                displaySymbol = `${entry.normalizedAsset}USDT`;
+                pair = await resolveKrakenSymbol(displaySymbol);
+                quote = 'USDT';
+            }
+            if (!pair) {
+                console.warn(`Unable to resolve Kraken pair for asset ${entry.assetCode}`);
+                continue;
+            }
+            holdingsToCreate.push({
+                asset: entry.normalizedAsset,
+                amount: entry.amount,
+                displaySymbol,
+                pair,
+                quote
+            });
+            pairLookups.push(pair);
+        }
+        const uniquePairs = Array.from(new Set(pairLookups));
+        let tickerMap = {};
+        if (uniquePairs.length > 0) {
+            const tickerResponse = await krakenRequest(`/0/public/Ticker?pair=${uniquePairs.join(',')}`);
+            if (tickerResponse.error && tickerResponse.error.length > 0) {
+                console.error('Kraken ticker error:', tickerResponse.error);
+            }
+            else {
+                tickerMap = tickerResponse.result || {};
+            }
+        }
+        const processedHoldings = [];
+        let tradingBalance = 0;
+        for (const holding of holdingsToCreate) {
+            const ticker = tickerMap[holding.pair];
+            let lastPrice = ticker ? parseFloat(ticker.c?.[0]) : NaN;
+            if (!ticker || isNaN(lastPrice) || lastPrice <= 0) {
+                // Attempt to derive price from alternative data
+                const vwaps = ticker?.p || [];
+                lastPrice = vwaps.length > 0 ? parseFloat(vwaps[0]) : NaN;
+            }
+            if (isNaN(lastPrice) || lastPrice <= 0) {
+                if (holding.quote === 'USDT') {
+                    lastPrice = 1;
+                }
+                else {
+                    console.warn(`Skipping holding price update for ${holding.displaySymbol}: no price data`);
+                    continue;
+                }
+            }
+            const value = holding.amount * lastPrice;
+            tradingBalance += value;
+            processedHoldings.push({
+                symbol: holding.displaySymbol,
+                amount: holding.amount,
+                price: lastPrice,
+                value
+            });
+        }
+        const totalBalance = cashBalance + tradingBalance;
+        await storage_1.storage.updatePortfolio(portfolio.id, {
+            availableBalance: cashBalance.toFixed(2),
+            tradingBalance: tradingBalance.toFixed(2),
+            totalBalance: totalBalance.toFixed(2),
+            updatedAt: new Date()
+        });
+        const existingHoldings = await storage_1.storage.getHoldings(portfolio.id);
+        const existingBySymbol = new Map(existingHoldings.map(h => [h.symbol, h]));
+        const refreshedSymbols = new Set();
+        for (const holding of processedHoldings) {
+            const symbol = holding.symbol;
+            refreshedSymbols.add(symbol);
+            const payload = {
+                amount: holding.amount.toFixed(8),
+                averagePrice: holding.price.toFixed(2),
+                currentPrice: holding.price.toFixed(2),
+                value: holding.value.toFixed(2),
+                pnl: '0',
+                pnlPercentage: '0',
+            };
+            const existing = existingBySymbol.get(symbol);
+            if (existing) {
+                await storage_1.storage.updateHolding(existing.id, payload);
+            }
+            else {
+                await storage_1.storage.createHolding({
+                    portfolioId: portfolio.id,
+                    symbol,
+                    amount: payload.amount,
+                    averagePrice: payload.averagePrice,
+                    currentPrice: payload.currentPrice,
+                    value: payload.value,
+                    pnl: payload.pnl,
+                    pnlPercentage: payload.pnlPercentage
+                });
+            }
+        }
+        for (const holding of existingHoldings) {
+            if (!refreshedSymbols.has(holding.symbol)) {
+                await storage_1.storage.deleteHolding(holding.id);
+            }
+        }
+    }
+    catch (error) {
+        console.error('Failed to synchronize Kraken portfolio', error);
+    }
 }
 async function validateRiskLimits(userId, portfolioId, tradeValue, tradeSide, symbol, riskSettings) {
     // If risk management is disabled, allow all trades
@@ -959,6 +1101,7 @@ Respond with JSON only in this exact format:
                     krakenOrderId: orderResult.result.txid[0],
                     metadata: { kraken: true, pair: krakenSymbol }
                 });
+                await syncPortfolioFromKraken(user, portfolio, apiKey, apiSecret);
             }
             // Note: WebSocket broadcasting disabled for security - trade data should only be sent to authorized users
             res.json({ trade });
@@ -1114,6 +1257,10 @@ Respond with JSON only in this exact format:
                 krakenApiKey: encryptedKey,
                 krakenApiSecret: encryptedSecret
             });
+            const portfolio = await storage_1.storage.getPortfolio(user.id);
+            if (portfolio) {
+                await syncPortfolioFromKraken(user, portfolio, apiKey, apiSecret);
+            }
             res.json({ success: true });
         }
         catch (error) {

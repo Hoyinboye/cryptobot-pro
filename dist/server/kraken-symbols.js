@@ -1,8 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPopularPairs = exports.resolveKrakenPairs = exports.getDisplaySymbol = exports.getKrakenSymbol = exports.displayFromAssets = exports.displayFromAltname = void 0;
+exports.getPopularPairs = exports.resolveKrakenPairs = exports.getDisplaySymbol = exports.getKrakenSymbol = exports.displayFromAssets = exports.displayFromAltname = exports.LEGACY_SYMBOL_MAP = exports.normalizeAsset = void 0;
 const ASSET_ENDPOINT = 'https://api.kraken.com/0/public/AssetPairs';
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+exports.normalizeAsset = normalizeAsset;
+const LEGACY_SYMBOL_MAP = {
+    BTCUSD: 'XXBTZUSD',
+    ETHUSD: 'XETHZUSD',
+    ADAUSD: 'ADAUSD',
+    SOLUSD: 'SOLUSD',
+    DOTUSD: 'DOTUSD',
+    LINKUSD: 'LINKUSD'
+};
+exports.LEGACY_SYMBOL_MAP = LEGACY_SYMBOL_MAP;
 let symbolCache = {
     fetchedAt: 0,
     toKraken: new Map(),
@@ -69,6 +79,23 @@ function displayFromAssets(base, quote) {
 exports.displayFromAssets = displayFromAssets;
 async function loadSymbolCache() {
     const now = Date.now();
+    if (process.env.KRAKEN_STUB === 'true' || process.env.NODE_ENV === 'test') {
+        if (symbolCache.toKraken.size === 0) {
+            for (const [symbol, pair] of Object.entries(LEGACY_SYMBOL_MAP)) {
+                symbolCache.toKraken.set(symbol, pair);
+                symbolCache.toDisplay.set(pair, displayFromAltname(symbol));
+                symbolCache.ordered.push({
+                    pair,
+                    display: displayFromAltname(symbol),
+                    base: normalizeAsset(symbol.slice(0, -3)),
+                    quote: normalizeAsset(symbol.slice(-3)),
+                    altname: symbol,
+                });
+            }
+            symbolCache.fetchedAt = now;
+        }
+        return symbolCache;
+    }
     if (symbolCache.toKraken.size > 0 && now - symbolCache.fetchedAt < CACHE_TTL_MS) {
         return symbolCache;
     }
@@ -131,7 +158,7 @@ async function getKrakenSymbol(symbol) {
     }
     const normalized = symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     const cache = await loadSymbolCache();
-    return cache.toKraken.get(normalized) || null;
+    return cache.toKraken.get(normalized) || LEGACY_SYMBOL_MAP[normalized] || null;
 }
 exports.getKrakenSymbol = getKrakenSymbol;
 async function getDisplaySymbol(krakenPair) {
@@ -160,6 +187,10 @@ async function resolveKrakenPairs(symbols) {
         const match = cache.toKraken.get(normalized);
         if (match) {
             resolved.add(match);
+            continue;
+        }
+        if (LEGACY_SYMBOL_MAP[normalized]) {
+            resolved.add(LEGACY_SYMBOL_MAP[normalized]);
         }
     }
     return Array.from(resolved);
@@ -177,6 +208,9 @@ async function getPopularPairs(limit = 6) {
     }
     const fallback = cache.ordered.slice(0, limit);
     const combined = [...new Set([...primary, ...fallback])].slice(0, limit);
-    return combined.map(entry => entry.pair);
+    if (combined.length > 0) {
+        return combined.map(entry => entry.pair);
+    }
+    return Object.values(LEGACY_SYMBOL_MAP).slice(0, limit);
 }
 exports.getPopularPairs = getPopularPairs;
