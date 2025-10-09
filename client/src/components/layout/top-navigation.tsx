@@ -1,16 +1,13 @@
 // Force update - testing deployment
 import { useAuth } from '@/hooks/use-auth';
-import { useTheme } from '@/contexts/theme-context';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Sun, Moon } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export function TopNavigation() {
   const { user, signOut } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
   const [isSwitchingMode, setIsSwitchingMode] = useState(false);
 
@@ -96,19 +93,6 @@ export function TopNavigation() {
 
           {/* User Menu */}
           <div className="flex items-center space-x-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleTheme}
-              data-testid="theme-toggle"
-            >
-              {theme === 'dark' ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )}
-            </Button>
-
             <Button variant="ghost" size="sm" data-testid="notifications">
               <i className="far fa-bell text-muted-foreground"></i>
             </Button>

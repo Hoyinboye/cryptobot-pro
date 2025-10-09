@@ -9,12 +9,10 @@
     <script>
       (function () {
         try {
-          var storedTheme = localStorage.getItem('theme');
-          var theme = storedTheme === 'light' ? 'light' : 'dark';
           var root = document.documentElement;
           root.classList.remove('light', 'dark');
-          root.classList.add(theme);
-          root.setAttribute('data-theme', theme);
+          root.classList.add('dark');
+          root.setAttribute('data-theme', 'dark');
         } catch (error) {
           document.documentElement.classList.add('dark');
           document.documentElement.setAttribute('data-theme', 'dark');

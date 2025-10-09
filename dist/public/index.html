@@ -9,20 +9,18 @@
     <script>
       (function () {
         try {
-          var storedTheme = localStorage.getItem('theme');
-          var theme = storedTheme === 'light' ? 'light' : 'dark';
           var root = document.documentElement;
           root.classList.remove('light', 'dark');
-          root.classList.add(theme);
-          root.setAttribute('data-theme', theme);
+          root.classList.add('dark');
+          root.setAttribute('data-theme', 'dark');
         } catch (error) {
           document.documentElement.classList.add('dark');
           document.documentElement.setAttribute('data-theme', 'dark');
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index.Dak3AzPZ.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index.DLWuYxhe.css">
+    <script type="module" crossorigin src="/assets/index.ClglUP2b.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index.5_5tHPgd.css">
   </head>
   <body>
     <div id="root"></div>

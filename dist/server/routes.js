@@ -44,11 +44,16 @@ function nextPrivateNonce() {
     }
     return lastPrivateNonce;
 }
-async function krakenRequest(endpoint, data = {}, apiKey, apiSecret) {
+const KRAKEN_BASE_URL = 'https://api.kraken.com';
+const KRAKEN_SANDBOX_BASE_URL = 'https://api.sandbox.kraken.com';
+function getKrakenBaseUrl(useSandbox) {
+    return useSandbox ? KRAKEN_SANDBOX_BASE_URL : KRAKEN_BASE_URL;
+}
+async function krakenRequest(endpoint, data = {}, apiKey, apiSecret, options = {}) {
     if ((0, kraken_stub_1.isKrakenStubEnabled)()) {
         return (0, kraken_stub_1.handleStubbedRequest)(endpoint, data, apiKey, apiSecret);
     }
-    const baseUrl = 'https://api.kraken.com';
+    const baseUrl = options.baseUrl || KRAKEN_BASE_URL;
     if (apiKey && apiSecret) {
         // Private API call
         const nonce = nextPrivateNonce().toString();
@@ -118,7 +123,9 @@ async function getPreferredKrakenPairs() {
 }
 async function syncPortfolioFromKraken(user, portfolio, apiKey, apiSecret) {
     try {
-        const balanceResponse = await krakenRequest('/0/private/Balance', {}, apiKey, apiSecret);
+        const useSandbox = Boolean(user?.riskSettings?.krakenSandbox);
+        const baseUrl = getKrakenBaseUrl(useSandbox);
+        const balanceResponse = await krakenRequest('/0/private/Balance', {}, apiKey, apiSecret, { baseUrl });
         if (balanceResponse.error && balanceResponse.error.length > 0) {
             console.error('Kraken balance error:', balanceResponse.error);
             return;
@@ -182,11 +189,15 @@ async function syncPortfolioFromKraken(user, portfolio, apiKey, apiSecret) {
         const uniquePairs = Array.from(new Set(pairLookups));
         let tickerMap = {};
         if (uniquePairs.length > 0) {
-            const tickerResponse = await krakenRequest(`/0/public/Ticker?pair=${uniquePairs.join(',')}`);
+            let tickerResponse = await krakenRequest(`/0/public/Ticker?pair=${uniquePairs.join(',')}`, {}, undefined, undefined, { baseUrl });
             if (tickerResponse.error && tickerResponse.error.length > 0) {
                 console.error('Kraken ticker error:', tickerResponse.error);
+                if (useSandbox) {
+                    console.warn('Falling back to production Kraken market data for sandbox environment');
+                    tickerResponse = await krakenRequest(`/0/public/Ticker?pair=${uniquePairs.join(',')}`);
+                }
             }
-            else {
+            if (!(tickerResponse.error && tickerResponse.error.length > 0)) {
                 tickerMap = tickerResponse.result || {};
             }
         }
@@ -335,11 +346,12 @@ async function validateRiskLimits(userId, portfolioId, tradeValue, tradeSide, sy
 // Helper function to fetch and transform Kraken trade history
 async function getKrakenTradeHistory(apiKey, apiSecret, options = {}) {
     try {
+        const { params: extraParams = {}, baseUrl } = options;
         const params = {
             trades: true, // Include trade info
-            ...options
+            ...extraParams
         };
-        const response = await krakenRequest('/0/private/ClosedOrders', params, apiKey, apiSecret);
+        const response = await krakenRequest('/0/private/ClosedOrders', params, apiKey, apiSecret, { baseUrl });
         if (response.error && response.error.length > 0) {
             console.error('Kraken ClosedOrders error:', response.error);
             return [];
@@ -512,30 +524,47 @@ async function registerRoutes(app) {
             }
             const { enabled, maxPositionSize, maxDailyLoss, maxOpenPositions } = req.body;
             // Validate input
-            const riskSettings = {};
+            const riskSettings = {
+                ...(user.riskSettings || {})
+            };
             if (typeof enabled === 'boolean') {
                 riskSettings.enabled = enabled;
             }
-            if (maxPositionSize !== undefined && maxPositionSize !== null && maxPositionSize !== '') {
-                const value = parseFloat(maxPositionSize);
-                if (isNaN(value) || value <= 0) {
-                    return res.status(400).json({ error: 'Max position size must be a positive number greater than zero' });
+            if (maxPositionSize !== undefined && maxPositionSize !== null) {
+                if (maxPositionSize === '') {
+                    delete riskSettings.maxPositionSize;
                 }
-                riskSettings.maxPositionSize = value.toString();
+                else {
+                    const value = parseFloat(maxPositionSize);
+                    if (isNaN(value) || value <= 0) {
+                        return res.status(400).json({ error: 'Max position size must be a positive number greater than zero' });
+                    }
+                    riskSettings.maxPositionSize = value.toString();
+                }
             }
-            if (maxDailyLoss !== undefined && maxDailyLoss !== null && maxDailyLoss !== '') {
-                const value = parseFloat(maxDailyLoss);
-                if (isNaN(value) || value <= 0) {
-                    return res.status(400).json({ error: 'Max daily loss must be a positive number greater than zero' });
+            if (maxDailyLoss !== undefined && maxDailyLoss !== null) {
+                if (maxDailyLoss === '') {
+                    delete riskSettings.maxDailyLoss;
                 }
-                riskSettings.maxDailyLoss = value.toString();
+                else {
+                    const value = parseFloat(maxDailyLoss);
+                    if (isNaN(value) || value <= 0) {
+                        return res.status(400).json({ error: 'Max daily loss must be a positive number greater than zero' });
+                    }
+                    riskSettings.maxDailyLoss = value.toString();
+                }
             }
-            if (maxOpenPositions !== undefined && maxOpenPositions !== null && maxOpenPositions !== '') {
-                const value = parseInt(maxOpenPositions, 10);
-                if (isNaN(value) || !Number.isInteger(value) || value < 1) {
-                    return res.status(400).json({ error: 'Max open positions must be an integer of at least 1' });
+            if (maxOpenPositions !== undefined && maxOpenPositions !== null) {
+                if (maxOpenPositions === '') {
+                    delete riskSettings.maxOpenPositions;
                 }
-                riskSettings.maxOpenPositions = value;
+                else {
+                    const value = parseInt(maxOpenPositions, 10);
+                    if (isNaN(value) || !Number.isInteger(value) || value < 1) {
+                        return res.status(400).json({ error: 'Max open positions must be an integer of at least 1' });
+                    }
+                    riskSettings.maxOpenPositions = value;
+                }
             }
             // Update user risk settings
             await storage_1.storage.updateUser(user.id, { riskSettings });
@@ -1075,6 +1104,8 @@ Respond with JSON only in this exact format:
                 if (!krakenSymbol) {
                     return res.status(400).json({ error: `Unsupported trading pair: ${tradeData.symbol}` });
                 }
+                const useSandbox = Boolean(user?.riskSettings?.krakenSandbox);
+                const baseUrl = getKrakenBaseUrl(useSandbox);
                 const orderData = {
                     pair: krakenSymbol,
                     type: tradeData.side,
@@ -1082,9 +1113,10 @@ Respond with JSON only in this exact format:
                     volume: tradeData.amount,
                     ...(tradeData.type === 'limit' ? { price: tradeData.price } : {})
                 };
-                const orderResult = await krakenRequest('/0/private/AddOrder', orderData, apiKey, apiSecret);
+                const orderResult = await krakenRequest('/0/private/AddOrder', orderData, apiKey, apiSecret, { baseUrl });
                 if (orderResult.error && orderResult.error.length > 0) {
-                    return res.status(400).json({ error: orderResult.error[0] });
+                    const errorMessage = orderResult.error[0] || 'Kraken order rejected';
+                    return res.status(400).json({ error: errorMessage });
                 }
                 trade = await storage_1.storage.createTrade({
                     userId: user.id,
@@ -1135,7 +1167,9 @@ Respond with JSON only in this exact format:
                 try {
                     const apiKey = (0, secure_storage_1.decryptSensitive)(user.krakenApiKey);
                     const apiSecret = (0, secure_storage_1.decryptSensitive)(user.krakenApiSecret);
-                    const krakenTrades = await getKrakenTradeHistory(apiKey, apiSecret, {});
+                    const useSandbox = Boolean(user?.riskSettings?.krakenSandbox);
+                    const baseUrl = getKrakenBaseUrl(useSandbox);
+                    const krakenTrades = await getKrakenTradeHistory(apiKey, apiSecret, { baseUrl });
                     // Create a map of database trades by krakenOrderId for deduplication
                     const dbTradesByKrakenId = new Map(dbTrades
                         .filter(t => t.krakenOrderId)
@@ -1235,13 +1269,16 @@ Respond with JSON only in this exact format:
             // Validate request body
             const settingsSchema = zod_1.z.object({
                 apiKey: zod_1.z.string().min(1, 'API key is required'),
-                apiSecret: zod_1.z.string().min(1, 'API secret is required')
+                apiSecret: zod_1.z.string().min(1, 'API secret is required'),
+                useSandbox: zod_1.z.boolean().optional()
             });
-            const { apiKey, apiSecret } = settingsSchema.parse(req.body);
+            const { apiKey, apiSecret, useSandbox = false } = settingsSchema.parse(req.body);
             // Test API keys by making a balance request
-            const balanceResult = await krakenRequest('/0/private/Balance', {}, apiKey, apiSecret);
+            const baseUrl = getKrakenBaseUrl(useSandbox);
+            const balanceResult = await krakenRequest('/0/private/Balance', {}, apiKey, apiSecret, { baseUrl });
             if (balanceResult.error && balanceResult.error.length > 0) {
-                return res.status(400).json({ error: 'Invalid API keys' });
+                const errorMessage = balanceResult.error[0] || 'Invalid API keys';
+                return res.status(400).json({ error: errorMessage });
             }
             let encryptedKey;
             let encryptedSecret;
@@ -1253,15 +1290,21 @@ Respond with JSON only in this exact format:
                 console.error('Failed to encrypt Kraken API keys', cryptoError);
                 return res.status(500).json({ error: 'Server-side encryption error. Please contact support before retrying.' });
             }
+            const updatedRiskSettings = {
+                ...(user.riskSettings || {}),
+                krakenSandbox: !!useSandbox
+            };
             await storage_1.storage.updateUser(user.id, {
                 krakenApiKey: encryptedKey,
-                krakenApiSecret: encryptedSecret
+                krakenApiSecret: encryptedSecret,
+                riskSettings: updatedRiskSettings
             });
+            user.riskSettings = updatedRiskSettings;
             const portfolio = await storage_1.storage.getPortfolio(user.id);
             if (portfolio) {
                 await syncPortfolioFromKraken(user, portfolio, apiKey, apiSecret);
             }
-            res.json({ success: true });
+            res.json({ success: true, environment: useSandbox ? 'sandbox' : 'live' });
         }
         catch (error) {
             res.status(500).json({ error: 'Failed to update API keys' });

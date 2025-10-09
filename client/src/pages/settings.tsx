@@ -39,6 +39,7 @@ export default function Settings() {
       setMaxPositionSize(user.riskSettings.maxPositionSize || '');
       setMaxDailyLoss(user.riskSettings.maxDailyLoss || '');
       setMaxOpenPositions(user.riskSettings.maxOpenPositions?.toString() || '');
+      setSandboxMode(Boolean(user.riskSettings.krakenSandbox));
     }
   }, [user]);
 
@@ -73,7 +74,7 @@ export default function Settings() {
   };
 
   const saveKrakenKeysMutation = useMutation({
-    mutationFn: async (payload: { apiKey: string; apiSecret: string }) => {
+    mutationFn: async (payload: { apiKey: string; apiSecret: string; useSandbox: boolean }) => {
       const response = await apiRequest('POST', '/api/settings/kraken', payload);
       return response.json();
     },
@@ -86,6 +87,7 @@ export default function Settings() {
       setKrakenApiSecret('');
       queryClient.invalidateQueries({ queryKey: ['/api/portfolio'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/profile'] });
     },
     onError: (error: any) => {
       toast({
@@ -112,6 +114,7 @@ export default function Settings() {
     saveKrakenKeysMutation.mutate({
       apiKey: trimmedKey,
       apiSecret: trimmedSecret,
+      useSandbox: sandboxMode,
     });
   };
 
