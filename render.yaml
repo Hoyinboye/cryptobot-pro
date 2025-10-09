@@ -21,7 +21,7 @@ services:
     name: cryptobot-frontend
     env: static
     buildCommand: cd client && npm install && npm run build
-    staticPublishPath: ./client/dist
+    staticPublishPath: ./dist/public
     routes:
       - type: rewrite
         source: /*
