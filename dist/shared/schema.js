@@ -156,6 +156,9 @@ exports.insertTradingStrategySchema = zod_1.z.object({
 });
 // Function to convert User to PublicUser (sanitize sensitive data)
 function sanitizeUser(user) {
-    const { krakenApiKey, krakenApiSecret, riskSettings, ...publicUser } = user;
-    return publicUser;
+    const { krakenApiKey, krakenApiSecret, ...publicUser } = user;
+    return {
+        ...publicUser,
+        riskSettings: user.riskSettings || {}
+    };
 }

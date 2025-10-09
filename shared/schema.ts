@@ -254,10 +254,14 @@ export interface PublicUser {
   photoURL: string | null;
   isDemo: boolean | null;
   createdAt: Date | null;
+  riskSettings?: any;
 }
 
 // Function to convert User to PublicUser (sanitize sensitive data)
 export function sanitizeUser(user: User): PublicUser {
-  const { krakenApiKey, krakenApiSecret, riskSettings, ...publicUser } = user;
-  return publicUser;
+  const { krakenApiKey, krakenApiSecret, ...publicUser } = user;
+  return {
+    ...publicUser,
+    riskSettings: user.riskSettings || {}
+  };
 }
